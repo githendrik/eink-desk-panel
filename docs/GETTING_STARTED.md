@@ -18,15 +18,12 @@ If you haven't already, install PlatformIO:
    const char* WIFI_SSID = "your_wifi_name";
    const char* WIFI_PASSWORD = "your_wifi_password";
    const char* OPENWEATHER_API_KEY = "your_weather_api_key";
-   const char* SPOTIFY_CLIENT_ID = "your_spotify_client_id";
-   const char* SPOTIFY_CLIENT_SECRET = "your_spotify_secret";
-   const char* SPOTIFY_REFRESH_TOKEN = "your_refresh_token";
    ```
 
-3. Get your Spotify refresh token:
-   ```bash
-   python scripts/get_spotify_refresh_token.py
-   ```
+3. Get a free OpenWeatherMap API key:
+   - Sign up at https://openweathermap.org/api
+   - Navigate to API keys section
+   - Copy your key to `credentials.h`
 
 ## Step 3: Configure Hardware
 
@@ -49,7 +46,7 @@ pio run
 pio run -t upload
 
 # Monitor serial output
-pio device monitor
+pio device monitor -b 115200
 ```
 
 ## Step 5: Test the Display
@@ -57,32 +54,54 @@ pio device monitor
 After upload:
 1. Open Serial Monitor (`pio device monitor -b 115200`)
 2. Watch for WiFi connection messages
-3. The display should show the weather screen first
-4. Press buttons (if connected) to cycle through screens
+3. The display should show weather data
+4. Check for API errors in serial output
 
 ## Troubleshooting
 
 ### WiFi Connection Fails
 - Check SSID and password in `credentials.h`
 - Ensure 2.4GHz WiFi (ESP32 doesn't support 5GHz)
+- Check signal strength at device location
 
 ### Display Not Working
 - Check wiring (GPIO 7 powers the display)
 - Verify SPI connections
+- Listen for relay click on boot
 
-### Spotify Shows "Not Playing"
-- Ensure Spotify is playing on a device
-- Check that refresh token is valid
-- Look for HTTP 401 errors in serial monitor
-
-### API Errors
-- Check API keys are valid
-- Look at HTTP response codes in serial monitor
+### Weather Shows Default Values
+- Check API key is valid
+- Look for HTTP response codes in serial monitor
 - Verify internet connectivity
+- Check city ID is correct (2661552 for Bern)
+
+### API Rate Limiting
+- OpenWeatherMap free tier: 60 calls/minute
+- Device fetches once per hour (well within limits)
+
+## Customization
+
+### Change Location
+Edit `src/weather_screen.h`:
+```cpp
+String city = "YourCity";
+String countryCode = "YOUR_CITY_ID"; // OpenWeatherMap city ID
+```
+
+### Change Refresh Interval
+Edit `src/main.ino`:
+```cpp
+if (millis() - lastWeatherFetch >= 1000*60*30) { // 30 minutes
+```
+
+### Modify Display Layout
+Edit `display_weather_screen()` in `src/weather_screen.h`:
+- Adjust X/Y coordinates for text positioning
+- Change font sizes (16, 24, 48 available)
+- Modify weather icon selection logic
 
 ## Next Steps
 
-- Customize screen layouts in `src/*_screen.h` files
-- Add new screens by following the existing pattern
-- Adjust refresh intervals in `src/main.ino`
 - Read [AI_CONTEXT.md](docs/AI_CONTEXT.md) for development guidance
+- Check [API_REFERENCE.md](docs/API_REFERENCE.md) for API details
+- Customize the display layout to your preference

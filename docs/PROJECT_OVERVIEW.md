@@ -2,11 +2,11 @@
 
 ## Project Description
 
-This project implements a multi-screen information display for an E-Ink panel powered by an ESP32-S3 WROOM microcontroller. The device cycles through different information screens including:
+This project implements a single-screen weather display for an E-Ink panel powered by an ESP32-S3 WROOM microcontroller. The device displays:
 
-- **Screen 1**: Weather forecast
-- **Screen 2**: Public transport information  
-- **Screen 3**: Spotify "Now Playing" display
+- Current weather conditions
+- Temperature (current, min, max)
+- Aare river temperature and swimming conditions
 
 ## Hardware
 
@@ -20,24 +20,17 @@ This project implements a multi-screen information display for an E-Ink panel po
 
 ```
 eink-desk-panel/
-├── src/              # Main source code files
-│   ├── main.cpp      # Entry point and main loop
-│   ├── credentials.h # WiFi and API credentials (not committed)
-│   ├── weather_screen.h    # Weather display logic
-│   ├── transport_screen.h  # Transport display logic
-│   └── spotify_screen.h    # Spotify display logic
-├── include/          # Header files and assets
-│   ├── spotify_logo.h
-│   └── pic.h
-├── lib/              # Local libraries
-│   ├── EPD/          # E-Paper Display driver
-│   ├── EPD_GUI/      # GUI utilities for EPD
-│   └── EPD_SPI/      # SPI communication layer
-├── scripts/          # Utility scripts
-│   ├── convert_svg_to_epd.py
-│   └── get_spotify_refresh_token.py
-├── docs/             # Documentation
-└── platformio.ini    # PlatformIO configuration
+├── src/
+│   ├── main.ino              # Entry point and main loop
+│   ├── credentials.h         # WiFi and API credentials (not committed)
+│   └── weather_screen.h      # Weather display logic
+├── include/                  # Header files and assets
+├── lib/                      # Local libraries
+│   ├── EPD/                  # E-Paper Display driver
+│   ├── EPD_GUI/              # GUI utilities for EPD
+│   └── EPD_SPI/              # SPI communication layer
+├── scripts/                  # Utility scripts
+└── docs/                     # Documentation
 ```
 
 ### Key Components
@@ -45,21 +38,19 @@ eink-desk-panel/
 1. **EPD Driver** (`lib/EPD/`): Low-level e-paper display control
 2. **EPD_GUI** (`lib/EPD_GUI/`): Higher-level GUI functions (fonts, shapes, text)
 3. **EPD_SPI** (`lib/EPD_SPI/`): SPI communication abstraction
-4. **Screen Modules** (`src/*_screen.h`): Individual screen implementations
-5. **Credentials** (`src/credentials.h`): API keys and WiFi credentials (template only)
+4. **Weather Screen** (`src/weather_screen.h`): Weather and Aare data display
 
 ## API Integrations
 
-- **OpenWeatherMap**: Weather data
-- **Spotify API**: Currently playing track information
-- **Transport API**: Public transport departures (configurable)
+- **OpenWeatherMap**: Weather data (temperature, conditions, forecast)
+- **AareGuru**: Aare river temperature and swimming conditions for Bern
 
 ## Display Characteristics
 
 - Uses partial refresh for faster updates
-- Full refresh when switching screens
-- Power-efficient with deep sleep between updates
-- Screen indicators show current active screen
+- Full refresh on initial boot
+- Power-efficient with sleep between updates
+- Updates every hour
 
 ## Development Environment
 
@@ -69,8 +60,10 @@ eink-desk-panel/
   - Adafruit GFX Library
   - U8g2
   - U8g2_for_Adafruit_GFX
+  - Arduino_JSON
+  - TimeLib
 
 ## Version History
 
-- **v1**: Original implementation (in `/Users/taarihe1/Documents/PlatformIO/Projects/260121-111731-freenove_esp32_s3_wroom`)
-- **v2**: Current version - restructured for better maintainability and AI-assisted development
+- **v1**: Original multi-screen implementation (weather, transport, Spotify)
+- **v2**: Single-screen weather display, simplified architecture

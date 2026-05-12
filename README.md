@@ -1,19 +1,20 @@
 # E-Ink Desk Panel v2
 
-Multi-screen information display for E-Ink panel using ESP32-S3 WROOM.
+Single-screen weather display for E-Ink panel using ESP32-S3 WROOM.
 
 ## Features
 
 - **Weather Screen**: Current weather and forecast from OpenWeatherMap
-- **Transport Screen**: Real-time public transport departures
-- **Spotify Screen**: "Now Playing" display with album art support
+- **Aare Temperature**: River temperature data for Bern (from aareguru)
+- **Auto-refresh**: Updates every hour
+- **Low Power**: Deep sleep between updates
 
 ## Quick Start
 
 ### Prerequisites
 
 1. PlatformIO (VS Code extension or CLI)
-2. Python 3.x (for utility scripts)
+2. Python 3.x (optional, for utility scripts)
 3. Freenove ESP32-S3 WROOM board
 
 ### Setup
@@ -25,19 +26,28 @@ Multi-screen information display for E-Ink panel using ESP32-S3 WROOM.
 
 2. **Create credentials file**
    
-   Copy `src/credentials.h.example` to `src/credentials.h` and fill in your credentials:
-   - WiFi SSID and password
-   - Spotify API credentials (run `scripts/get_spotify_refresh_token.py`)
-   - Weather API key from OpenWeatherMap
-   - Transport API key
+   Copy `src/credentials.h.example` to `src/credentials.h`:
+   ```bash
+   cp src/credentials.h.example src/credentials.h
+   ```
 
-3. **Configure PlatformIO**
+3. **Edit credentials**
    
-   Edit `platformio.ini` if needed:
-   - `upload_port`: Your ESP32's serial port
+   Fill in your details in `src/credentials.h`:
+   ```cpp
+   const char* WIFI_SSID = "your_wifi_name";
+   const char* WIFI_PASSWORD = "your_wifi_password";
+   const char* OPENWEATHER_API_KEY = "your_weather_api_key";
+   const char* WEATHER_CITY = "Bern";
+   ```
+
+4. **Configure PlatformIO**
+   
+   Edit `platformio.ini`:
+   - `upload_port`: Your ESP32's serial port (e.g., `/dev/cu.usbserial-10`)
    - `monitor_port`: Same as upload_port
 
-4. **Build and Upload**
+5. **Build and Upload**
    ```bash
    pio run -t upload
    pio device monitor
@@ -47,31 +57,48 @@ Multi-screen information display for E-Ink panel using ESP32-S3 WROOM.
 
 ```
 eink-desk-panel/
-├── src/              # Source code
-├── include/          # Headers and assets
-├── lib/              # Local libraries (EPD drivers)
-├── scripts/          # Utility scripts
-├── docs/             # Documentation
-└── platformio.ini    # Configuration
+├── src/
+│   ├── main.ino              # Entry point
+│   ├── credentials.h.example # Credentials template
+│   └── weather_screen.h      # Weather display logic
+├── include/                  # Assets (icons, logos)
+├── lib/                      # EPD driver libraries
+├── scripts/                  # Utility scripts
+└── docs/                     # Documentation
 ```
 
 ## Documentation
 
-- [Project Overview](docs/PROJECT_OVERVIEW.md) - Architecture and components
+- [Project Overview](docs/PROJECT_OVERVIEW.md)
 - [AI Context](docs/AI_CONTEXT.md) - Guide for AI-assisted development
+- [API Reference](docs/API_REFERENCE.md)
+- [Getting Started](docs/GETTING_STARTED.md)
 
-## Scripts
+## Hardware
 
-- `get_spotify_refresh_token.py`: Obtain Spotify refresh token
-- `convert_svg_to_epd.py`: Convert SVG graphics to E-Ink compatible format
+- Board: Freenove ESP32-S3 WROOM
+- Display: E-Paper via SPI
+- Power: USB or external 5V
+- GPIO 7: Display power
+
+## Display Layout
+
+```
+┌─────────────────────────┐
+│  [Weather Icon]  23°    │
+│                  18°/26°│
+│                  Clear  │
+├─────────────────────────┤
+│  Aare  15°    swimming  │
+└─────────────────────────┘
+```
+
+## API Integrations
+
+- **OpenWeatherMap**: Weather data (temperature, conditions)
+- **AareGuru**: Aare river temperature and swimming conditions
 
 ## Development
-
-### Adding New Features
-
-1. Follow the existing screen pattern in `src/`
-2. Use `Serial.println()` for debugging
-3. Test partial vs full refresh behavior
 
 ### Code Style
 
@@ -79,11 +106,20 @@ eink-desk-panel/
 - Variables: `camelCase` (local), `snake_case` (global)
 - Constants: `UPPER_CASE`
 
-## Hardware
+### Modifying Refresh Interval
 
-- Board: Freenove ESP32-S3 WROOM
-- Display: E-Paper via SPI
-- Power: USB or external 5V
+Edit `src/main.ino`:
+```cpp
+if (millis() - lastWeatherFetch >= 1000*60*60) { // 1 hour
+```
+
+### Changing Location
+
+Edit `src/weather_screen.h`:
+```cpp
+String city = "Bern";
+String countryCode = "2661552"; // OpenWeatherMap city ID
+```
 
 ## License
 
@@ -91,4 +127,4 @@ eink-desk-panel/
 
 ## Acknowledgments
 
-Based on the original v1 project with improvements for maintainability and AI-assisted development.
+Based on the original v1 project, simplified to single-screen weather display.

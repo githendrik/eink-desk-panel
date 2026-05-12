@@ -2,56 +2,78 @@
 
 ## What's New in v2
 
-### Repository Restructuring
-- Moved from PlatformIO default structure to a more maintainable layout
-- Separated documentation into dedicated `docs/` folder
-- Created `scripts/` directory for utility Python scripts
-- Added comprehensive AI agent context documents
+### Single Screen Design
+- Removed multi-screen navigation
+- Removed button input handling
+- Focused on weather display only
+- Simplified codebase significantly
 
-### New Documentation
-- `PROJECT_OVERVIEW.md`: Architecture and component documentation
-- `AI_CONTEXT.md`: Guide for AI-assisted development
-- `API_REFERENCE.md`: API endpoint documentation
-- `GETTING_STARTED.md`: Step-by-step setup guide
-- `V2_CHANGES.md`: This file
+### Removed Features (from v1)
+- ~~Spotify "Now Playing" screen~~
+- ~~Public transport departures screen~~
+- ~~Screen switching with buttons~~
+- ~~Screen indicator dots~~
 
-### Code Organization
-- All source code from v1 preserved
-- Credentials template added (`credentials.h.example`)
-- Main entry point: `src/main.ino`
-- Screen modules: `src/*_screen.h`
-- Libraries: `lib/EPD*`
+### Retained Features
+- Weather display from OpenWeatherMap
+- Aare river temperature data
+- Hourly auto-refresh
+- Partial display refresh
+- Low power operation
 
-### What's the Same
-- All functionality from v1 is preserved
-- Same PlatformIO configuration
-- Same library dependencies
-- Same screen implementations
+### Code Changes
 
-## Migration from v1
+#### main.ino
+- Removed button interrupt handlers
+- Removed screen state management
+- Single screen update loop
+- Simplified setup and loop functions
 
-If you're migrating from v1 (`/Users/taarihe1/Documents/PlatformIO/Projects/260121-111731-freenove_esp32_s3_wroom`):
+#### weather_screen.h
+- Removed `httpGETRequest` callback parameter
+- Direct HTTP calls in fetch function
+- Removed screen indicator drawing
+- Cleaner display function
 
-1. Copy your `src/credentials.h` from v1 to v2
-2. Update `platformio.ini` with your port settings
-3. Build and upload as normal
+#### credentials.h
+- Removed Spotify credentials
+- Removed transport credentials
+- Added city configuration option
 
-## File Locations Mapping
+## File Changes
 
-| v1 Location | v2 Location |
-|-------------|-------------|
-| `src/*.h` | `src/*.h` (same) |
-| `src/main.ino` | `src/main.ino` (same) |
-| `include/*.h` | `include/*.h` (same) |
-| `lib/EPD*` | `lib/EPD*` (same) |
-| `*.py` (root) | `scripts/*.py` |
-| `*.svg` (root) | `scripts/*.svg` |
-| N/A | `docs/` (new) |
+| File | Status | Notes |
+|------|--------|-------|
+| `src/main.ino` | Simplified | Single screen logic |
+| `src/weather_screen.h` | Modified | Direct HTTP calls |
+| `src/spotify_screen.h` | Removed | Not needed |
+| `src/transport_screen.h` | Removed | Not needed |
+| `include/spotify_logo.h` | Removed | Not needed |
+| `scripts/get_spotify_refresh_token.py` | Removed | Not needed |
+| `scripts/spotify_logo.svg` | Removed | Not needed |
 
 ## Benefits of v2 Structure
 
-1. **Better Documentation**: Comprehensive guides for setup and development
-2. **AI-Friendly**: Context documents help AI agents understand the codebase
-3. **Cleaner Organization**: Scripts separated from source code
-4. **Easier Onboarding**: Getting started guide for new developers
-5. **Maintainability**: Clear separation of concerns
+1. **Simpler Code**: Easier to understand and modify
+2. **Faster Boot**: No unnecessary API calls
+3. **Lower Power**: Fewer network requests
+4. **Focused Purpose**: Single-purpose weather display
+5. **Easier Maintenance**: Fewer dependencies
+
+## Migration from v1
+
+If you're migrating from the multi-screen v1:
+
+1. Copy your WiFi credentials from v1
+2. Copy your OpenWeatherMap API key
+3. Remove Spotify and transport credentials (not needed)
+4. Update to new simplified `main.ino` structure
+
+## Upgrading to v2
+
+To use this version:
+
+1. Delete old `src/credentials.h`
+2. Copy new `src/credentials.h.example` to `src/credentials.h`
+3. Fill in WiFi and weather API credentials only
+4. Build and upload

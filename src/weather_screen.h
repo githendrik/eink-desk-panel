@@ -40,61 +40,71 @@ String getDate(String ts) {
   return String(buf);
 }
 
-// Fetch weather and aare data
-void fetch_weather_data(int& httpResponseCode, String (*httpGETRequest)(const char*))
+void fetch_weather_data(int& httpResponseCode)
 {
-  // Check if WiFi is connected successfully
-  if (WiFi.status() == WL_CONNECTED) {
-    // Build the OpenWeatherMap API request URL
-    String serverPath = "http://api.openweathermap.org/data/2.5/weather?q=" + city + "," + countryCode + "&APPID=" + openWeatherMapApiKey + "&units=metric";
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi Disconnected");
+    return;
+  }
 
-    // Try to get a successful HTTP response (non-blocking - single attempt)
-    // Send an HTTP GET request and get JSON data
-    jsonBuffer = httpGETRequest(serverPath.c_str());
-    Serial.println(jsonBuffer); // Print the retrieved JSON data
-    myObject = JSON.parse(jsonBuffer); // Parse the JSON data
+  String serverPath = "http://api.openweathermap.org/data/2.5/weather?id=" + countryCode + "&APPID=" + openWeatherMapApiKey + "&units=metric";
+  WiFiClient client;
+  HTTPClient http;
+  http.begin(client, serverPath);
+  httpResponseCode = http.GET();
 
-    // Check if the JSON data was parsed successfully
-    if (JSON.typeof(myObject) == "undefined" || httpResponseCode != 200) {
-      Serial.println("Parsing input failed or bad HTTP response!"); // If parsing fails, print error message and exit
+  if (httpResponseCode == 200) {
+    jsonBuffer = http.getString();
+    Serial.println(jsonBuffer);
+    myObject = JSON.parse(jsonBuffer);
+
+    if (JSON.typeof(myObject) == "undefined") {
+      Serial.println("Parsing input failed!");
+      http.end();
       return;
     }
 
-    // Extract weather information from the JSON data
     String w = myObject["weather"][0]["main"];
     weather = w;
-    temperature = String((int)round((double)myObject["main"]["temp"])); // Get the temperature rounded to nearest int
-    temperatureMin = String((int)round((double)myObject["main"]["temp_min"])); // Get the min temperature rounded to nearest int
-    temperatureMax = String((int)round((double)myObject["main"]["temp_max"])); // Get the max temperature rounded to nearest int
+    temperature = String((int)round((double)myObject["main"]["temp"]));
+    temperatureMin = String((int)round((double)myObject["main"]["temp_min"]));
+    temperatureMax = String((int)round((double)myObject["main"]["temp_max"]));
 
     String city_name = myObject["name"];
     city_js = city_name;
 
-    // Print the extracted weather information
     Serial.print("String weather: ");
     Serial.println(weather);
     Serial.print("String Temperature: ");
     Serial.println(temperature);
     Serial.print("String city_js: ");
     Serial.println(city_js);
+  } else {
+    Serial.print("Weather API error: ");
+    Serial.println(httpResponseCode);
+    http.end();
+    return;
+  }
 
-    httpResponseCode = 0;
-    String aareServerPath = "http://aareguru.existenz.ch/v2018/today?city=bern&app=li.richert.smartframe&version=0.0.1";
+  http.end();
 
-    // Try to get aare data (non-blocking - single attempt)
-    // Send an HTTP GET request and get JSON data
-    aareJsonBuffer = httpGETRequest(aareServerPath.c_str());
-    Serial.println(aareJsonBuffer); // Print the retrieved JSON data
-    aareObject = JSON.parse(aareJsonBuffer); // Parse the JSON data
+  String aareServerPath = "http://aareguru.existenz.ch/v2018/today?city=bern&app=li.richert.smartframe&version=0.0.1";
+  HTTPClient httpAare;
+  httpAare.begin(client, aareServerPath);
+  httpResponseCode = httpAare.GET();
 
-    // Check if the JSON data was parsed successfully
-    if (JSON.typeof(aareObject) == "undefined" || httpResponseCode != 200) {
-      Serial.println("Parsing aare data failed or bad HTTP response!"); // If parsing fails, print error message and exit
+  if (httpResponseCode == 200) {
+    aareJsonBuffer = httpAare.getString();
+    Serial.println(aareJsonBuffer);
+    aareObject = JSON.parse(aareJsonBuffer);
+
+    if (JSON.typeof(aareObject) == "undefined") {
+      Serial.println("Parsing aare data failed!");
+      httpAare.end();
       return;
     }
 
-    // Extract aare information from the JSON data
-    aareTemp = String((int)round((double)aareObject["aare"])); // Get the aare temperature rounded to nearest int
+    aareTemp = String((int)round((double)aareObject["aare"]));
     String aareTimeTs = JSON.stringify(aareObject["time"]);
     aareTime = getDate(aareTimeTs);
 
@@ -107,10 +117,12 @@ void fetch_weather_data(int& httpResponseCode, String (*httpGETRequest)(const ch
     Serial.println(aareText);
     Serial.print("String aare time: ");
     Serial.println(aareTime);
+  } else {
+    Serial.print("Aare API error: ");
+    Serial.println(httpResponseCode);
   }
-  else {
-    Serial.println("WiFi Disconnected"); // If WiFi is not connected, print error message
-  }
+
+  httpAare.end();
 }
 
 // Helper function to get weather icon index
@@ -161,31 +173,24 @@ void display_weather_screen(uint8_t* ImageBW, bool& forceFullRefresh)
   EPD_ShowPicture(20, 20, 184, 208, Weather_Num[weatherIcon], WHITE);
 
   // Display temperature data on the right - minimalist style
-  // Main temperature (large)
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "%s°", temperature.c_str());
   EPD_ShowStringUTF8(230, 60, buffer, 48, BLACK);
 
-  // Min/Max temperatures (smaller, below main temp)
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "%s° / %s°", temperatureMin.c_str(), temperatureMax.c_str());
   EPD_ShowStringUTF8(230, 120, buffer, 16, BLACK);
 
-  // Weather condition text
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "%s", weather.c_str());
   EPD_ShowStringUTF8(230, 150, buffer, 16, BLACK);
 
-  // Aare section (bottom of screen)
-  // Draw a subtle divider line
   EPD_DrawLine(20, 240, 380, 240, BLACK);
 
-  // Aare title and temp (left side)
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "Aare  %s°", aareTemp.c_str());
   EPD_ShowStringUTF8(30, 255, buffer, 16, BLACK);
   
-  // Aare condition text (right-aligned, truncate if too long)
   memset(buffer, 0, sizeof(buffer));
   String truncatedText = aareText;
   if (truncatedText.length() > 27) {
@@ -197,11 +202,6 @@ void display_weather_screen(uint8_t* ImageBW, bool& forceFullRefresh)
   int xPos = EPD_W - rightMargin - textWidth;
   EPD_ShowStringUTF8(xPos, 255, buffer, 16, BLACK);
 
-  // Draw screen indicators
-  extern void drawScreenIndicators(int activeScreen);
-  drawScreenIndicators(0);
-
-  // Update the e-ink display content with a single refresh
   EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
 }
 
