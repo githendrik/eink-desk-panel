@@ -10,6 +10,7 @@
 uint8_t ImageBW[15000];
 
 int httpResponseCode;
+bool forceFullRefresh = true;
 
 void setup() {
   Serial.begin(115200);
@@ -31,7 +32,7 @@ void setup() {
 
   fetch_weather_data(httpResponseCode);
 
-  display_weather_screen(ImageBW, true);
+  display_weather_screen(ImageBW, forceFullRefresh);
 }
 
 void loop() {
@@ -41,7 +42,8 @@ void loop() {
     Serial.println("Fetching weather data...");
     fetch_weather_data(httpResponseCode);
     lastWeatherFetch = millis();
-    display_weather_screen(ImageBW, false);
+    forceFullRefresh = false;
+    display_weather_screen(ImageBW, forceFullRefresh);
   }
 
   delay(10);

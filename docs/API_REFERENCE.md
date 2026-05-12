@@ -11,15 +11,30 @@ GET https://api.openweathermap.org/data/2.5/weather?id=2661552&appid=YOUR_API_KE
 ```
 
 ### Response Fields Used
-- `weather[0].main`: Weather condition (e.g., "Clear", "Clouds", "Rain")
 - `main.temp`: Current temperature in Celsius
 - `main.temp_min`: Minimum temperature
 - `main.temp_max`: Maximum temperature
-- `name`: City name
 
 ### City IDs
 - Bern, CH: 2661552
 - Find others: https://openweathermap.org/find
+
+### Air Pollution Data (for pollen estimate)
+```
+GET https://api.openweathermap.org/data/2.5/air_pollution?lat={LAT}&lon={LON}&appid={API_KEY}
+
+Example:
+GET https://api.openweathermap.org/data/2.5/air_pollution?lat=46.9480&lon=7.4474&appid=YOUR_API_KEY
+```
+
+### Response Fields Used
+- `list[0].components.pm2_5`: PM2.5 particle concentration
+
+### PM2.5 Levels (used as pollen proxy)
+- < 20: low
+- 20-40: moderate
+- 40-60: high
+- > 60: very high
 
 ## AareGuru API
 
@@ -30,8 +45,6 @@ GET https://aareguru.existenz.ch/v2018/today?city=bern&app=li.richert.smartframe
 
 ### Response Fields Used
 - `aare`: Water temperature in Celsius
-- `text`: Swimming condition description
-- `time`: Timestamp of reading
 
 ## Error Codes
 
@@ -39,3 +52,11 @@ GET https://aareguru.existenz.ch/v2018/today?city=bern&app=li.richert.smartframe
 - `401`: Unauthorized (invalid API key)
 - `404`: Not found (invalid city ID)
 - `429`: Too many requests (rate limited)
+
+## API Registration
+
+OpenWeatherMap offers a free tier:
+- 60 API calls per minute
+- 1,000,000 calls per month
+- No credit card required
+- Sign up at https://openweathermap.org/api

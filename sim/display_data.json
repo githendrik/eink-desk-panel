@@ -1,0 +1,13 @@
+{
+  "textElements": [
+    {"x": 120, "y": 80, "text": "23°", "fontSize": 72, "color": 1},
+    {"x": 120, "y": 170, "text": "Pollen moderate", "fontSize": 24, "color": 1},
+    {"x": 120, "y": 220, "text": "Aare 15°", "fontSize": 24, "color": 1}
+  ],
+  "lineElements": [
+
+  ],
+  "pictureElements": [
+
+  ]
+}

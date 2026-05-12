@@ -17,7 +17,7 @@ If you haven't already, install PlatformIO:
    ```cpp
    const char* WIFI_SSID = "your_wifi_name";
    const char* WIFI_PASSWORD = "your_wifi_password";
-   const char* OPENWEATHER_API_KEY = "your_weather_api_key";
+   const char* OPENWEATHER_API_KEY = "your_openweathermap_api_key";
    ```
 
 3. Get a free OpenWeatherMap API key:
@@ -54,7 +54,7 @@ pio device monitor -b 115200
 After upload:
 1. Open Serial Monitor (`pio device monitor -b 115200`)
 2. Watch for WiFi connection messages
-3. The display should show weather data
+3. The display should show temperature data
 4. Check for API errors in serial output
 
 ## Troubleshooting
@@ -76,7 +76,7 @@ After upload:
 - Check city ID is correct (2661552 for Bern)
 
 ### API Rate Limiting
-- OpenWeatherMap free tier: 60 calls/minute
+- OpenWeatherMap free tier: 60 calls/minute, 1M/month
 - Device fetches once per hour (well within limits)
 
 ## Customization
@@ -84,8 +84,12 @@ After upload:
 ### Change Location
 Edit `src/weather_screen.h`:
 ```cpp
-String city = "YourCity";
-String countryCode = "YOUR_CITY_ID"; // OpenWeatherMap city ID
+String cityId = "2661552"; // OpenWeatherMap city ID
+```
+
+For air pollution/pollen, also update coordinates:
+```cpp
+String pollenServerPath = "http://api.openweathermap.org/data/2.5/air_pollution?lat=46.9480&lon=7.4474&appid=" + openWeatherMapApiKey;
 ```
 
 ### Change Refresh Interval
@@ -97,8 +101,8 @@ if (millis() - lastWeatherFetch >= 1000*60*30) { // 30 minutes
 ### Modify Display Layout
 Edit `display_weather_screen()` in `src/weather_screen.h`:
 - Adjust X/Y coordinates for text positioning
-- Change font sizes (16, 24, 48 available)
-- Modify weather icon selection logic
+- Change font sizes (8, 12, 16, 24, 32, 48, 72 available)
+- Reposition temperature, pollen, and Aare display
 
 ## Next Steps
 
