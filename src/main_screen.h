@@ -1,0 +1,337 @@
+#ifndef WEATHER_SCREEN_H
+#define WEATHER_SCREEN_H
+
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <Arduino_JSON.h>
+#include <time.h>
+#include "EPD.h"
+#include "EPD_GUI.h"
+#include "credentials.h"
+
+String temperature;
+String aareTemp;
+String pollenLevel;
+String weight;
+String weightTrend;
+
+String openWeatherMapApiKey = OPENWEATHER_API_KEY;
+String cityId = "2661552";
+
+String withingsClientId = WITHINGS_CLIENT_ID;
+String withingsClientSecret = WITHINGS_CLIENT_SECRET;
+String withingsAccessToken = WITHINGS_ACCESS_TOKEN;
+String withingsRefreshToken = WITHINGS_REFRESH_TOKEN;
+String withingsUserId = WITHINGS_USER_ID;
+
+String jsonBuffer;
+JSONVar myObject;
+String aareJsonBuffer;
+JSONVar aareObject;
+String pollenJsonBuffer;
+JSONVar pollenObject;
+String weightJsonBuffer;
+JSONVar weightObject;
+
+String getPollenText(int level) {
+  switch(level) {
+    case 0: return "none";
+    case 1: return "low";
+    case 2: return "moderate";
+    case 3: return "high";
+    case 4: return "very high";
+    case 5: return "extreme";
+    default: return "n/a";
+  }
+}
+
+String getTrendText(float change) {
+  if (change < -0.5) return "losing";
+  if (change > 0.5) return "gaining";
+  return "stable";
+}
+
+void fetch_withings_token(int& httpResponseCode) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi Disconnected - cannot fetch Withings token");
+    return;
+  }
+  
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  
+  http.begin(client, "https://oauth2.withings.com/v2/oauth2/token");
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  
+  String postData = "grant_type=refresh_token&refresh_token=" + withingsRefreshToken + 
+                    "&client_id=" + withingsClientId + 
+                    "&client_secret=" + withingsClientSecret;
+  
+  httpResponseCode = http.POST(postData);
+  
+  if (httpResponseCode == 200) {
+    String payload = http.getString();
+    Serial.println("Withings token refreshed successfully");
+    
+    JSONVar tokenObject = JSON.parse(payload);
+    
+    if (JSON.typeof(tokenObject) != "undefined") {
+      String token = JSON.stringify(tokenObject["access_token"]);
+      token.replace("\"", "");
+      withingsAccessToken = token;
+    }
+  } else {
+    Serial.print("Failed to refresh Withings token. HTTP code: ");
+    Serial.println(httpResponseCode);
+  }
+  
+  http.end();
+}
+
+void fetch_weight_data(int& httpResponseCode) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi Disconnected");
+    return;
+  }
+
+  if (withingsAccessToken.length() == 0) {
+    Serial.println("No access token, fetching...");
+    fetch_withings_token(httpResponseCode);
+    if (httpResponseCode != 200) return;
+  }
+
+  time_t now = time(NULL);
+  if (now < 1000000000) {
+    Serial.println("Time not set yet, skipping weight fetch");
+    return;
+  }
+  time_t sixMonthsAgo = now - (180 * 24 * 60 * 60);
+  
+  String serverPath = "https://wbsapi.withings.net/measure";
+  Serial.print("Withings URL: ");
+  Serial.println(serverPath);
+  
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.begin(client, serverPath);
+  http.addHeader("Authorization", "Bearer " + withingsAccessToken);
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  
+  String postData = "action=getmeas&startdate=" + String(sixMonthsAgo) + 
+                    "&enddate=" + String(now);
+  
+  Serial.print("Withings POST: ");
+  Serial.println(postData);
+  
+  httpResponseCode = http.POST(postData);
+
+  Serial.print("Withings HTTP code: ");
+  Serial.println(httpResponseCode);
+
+  if (httpResponseCode == 200) {
+    weightJsonBuffer = http.getString();
+    Serial.println(weightJsonBuffer);
+    weightObject = JSON.parse(weightJsonBuffer);
+
+    if (JSON.typeof(weightObject) == "undefined") {
+      Serial.println("Parsing weight data failed!");
+      http.end();
+      return;
+    }
+
+    int apiStatus = (int)round((double)weightObject["status"]);
+    Serial.print("Withings API status: ");
+    Serial.println(apiStatus);
+    
+    if (apiStatus != 0) {
+      Serial.println("Withings API returned error status");
+      Serial.print("Error: ");
+      String errorMsg = JSON.stringify(weightObject["error"]);
+      Serial.println(errorMsg);
+      http.end();
+      return;
+    }
+
+    if (JSON.typeof(weightObject["body"]["measuregrps"]) != "undefined") {
+      int groupsCount = weightObject["body"]["measuregrps"].length();
+      Serial.print("Measure groups count: ");
+      Serial.println(groupsCount);
+      
+      if (groupsCount > 0) {
+        int measuresCount = weightObject["body"]["measuregrps"][0]["measures"].length();
+        if (measuresCount > 0) {
+          double latestWeight = (double)weightObject["body"]["measuregrps"][0]["measures"][0]["value"];
+          weight = String(latestWeight / 1000.0, 1);
+          
+          if (groupsCount >= 2) {
+            int oldMeasuresCount = weightObject["body"]["measuregrps"][groupsCount - 1]["measures"].length();
+            if (oldMeasuresCount > 0) {
+              double oldWeight = (double)weightObject["body"]["measuregrps"][groupsCount - 1]["measures"][0]["value"];
+              float change = (latestWeight - oldWeight) / 1000.0;
+              weightTrend = getTrendText(change);
+            } else {
+              weightTrend = "stable";
+            }
+          } else {
+            weightTrend = "stable";
+          }
+          
+          Serial.print("Weight: ");
+          Serial.print(weight);
+          Serial.print(" kg, Trend: ");
+          Serial.println(weightTrend);
+        }
+      } else {
+        Serial.println("No weight measurements found");
+        weight = "--.-";
+        weightTrend = "n/a";
+      }
+    }
+  } else if (httpResponseCode == 401) {
+    Serial.println("Token expired, refreshing...");
+    fetch_withings_token(httpResponseCode);
+  } else {
+    Serial.print("Withings API error: ");
+    Serial.println(httpResponseCode);
+    weight = "--.-";
+    weightTrend = "err";
+  }
+
+  http.end();
+}
+
+void fetch_weather_data(int& httpResponseCode) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi Disconnected");
+    return;
+  }
+
+  String serverPath = "http://api.openweathermap.org/data/2.5/weather?id=" + cityId + "&APPID=" + openWeatherMapApiKey + "&units=metric";
+  WiFiClient client;
+  HTTPClient http;
+  http.begin(client, serverPath);
+  httpResponseCode = http.GET();
+
+  if (httpResponseCode == 200) {
+    jsonBuffer = http.getString();
+    Serial.println(jsonBuffer);
+    myObject = JSON.parse(jsonBuffer);
+
+    if (JSON.typeof(myObject) == "undefined") {
+      Serial.println("Parsing input failed!");
+      http.end();
+      return;
+    }
+
+    temperature = String((int)round((double)myObject["main"]["temp"]));
+
+    Serial.print("String Temperature: ");
+    Serial.println(temperature);
+  } else {
+    Serial.print("Weather API error: ");
+    Serial.println(httpResponseCode);
+    http.end();
+    return;
+  }
+
+  http.end();
+
+  String pollenServerPath = "http://api.openweathermap.org/data/2.5/air_pollution?lat=46.9480&lon=7.4474&appid=" + openWeatherMapApiKey;
+  HTTPClient httpPollen;
+  httpPollen.begin(client, pollenServerPath);
+  httpResponseCode = httpPollen.GET();
+
+  if (httpResponseCode == 200) {
+    pollenJsonBuffer = httpPollen.getString();
+    pollenObject = JSON.parse(pollenJsonBuffer);
+
+    if (JSON.typeof(pollenObject) == "undefined") {
+      httpPollen.end();
+      return;
+    }
+
+    double pm25Value = (double)pollenObject["list"][0]["components"]["pm2_5"];
+    int pm25 = (int)pm25Value;
+    
+    if (pm25 < 20) pollenLevel = "low";
+    else if (pm25 < 40) pollenLevel = "moderate";
+    else if (pm25 < 60) pollenLevel = "high";
+    else pollenLevel = "very high";
+
+    Serial.print("Pollen level: ");
+    Serial.println(pollenLevel);
+  } else {
+    Serial.print("Pollen API error: ");
+    Serial.println(httpResponseCode);
+    pollenLevel = "n/a";
+  }
+
+  httpPollen.end();
+
+  fetch_weight_data(httpResponseCode);
+
+  String aareServerPath = "http://aareguru.existenz.ch/v2018/today?city=bern&app=li.richert.smartframe&version=0.0.1";
+  HTTPClient httpAare;
+  httpAare.begin(client, aareServerPath);
+  httpResponseCode = httpAare.GET();
+
+  if (httpResponseCode == 200) {
+    aareJsonBuffer = httpAare.getString();
+    Serial.println(aareJsonBuffer);
+    aareObject = JSON.parse(aareJsonBuffer);
+
+    if (JSON.typeof(aareObject) == "undefined") {
+      Serial.println("Parsing aare data failed!");
+      httpAare.end();
+      return;
+    }
+
+    aareTemp = String((int)round((double)aareObject["aare"]));
+
+    Serial.print("String aare temp: ");
+    Serial.println(aareTemp);
+  } else {
+    Serial.print("Aare API error: ");
+    Serial.println(httpResponseCode);
+  }
+
+  httpAare.end();
+}
+
+void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
+  static char buffer[64];
+
+  if (forceFullRefresh) {
+    EPD_Init();
+    EPD_Clear();
+    forceFullRefresh = false;
+  }
+
+  EPD_Init_Fast(Fast_Seconds_1_5s);
+  
+  Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
+  EPD_Full(WHITE);
+  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "%s°", temperature.c_str());
+  EPD_ShowStringUTF8(120, 60, buffer, 72, BLACK);
+
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "Pollen %s", pollenLevel.c_str());
+  EPD_ShowStringUTF8(120, 140, buffer, 20, BLACK);
+
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "Weight %s kg (%s)", weight.c_str(), weightTrend.c_str());
+  EPD_ShowStringUTF8(120, 180, buffer, 20, BLACK);
+
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "Aare %s°", aareTemp.c_str());
+  EPD_ShowStringUTF8(120, 220, buffer, 20, BLACK);
+
+  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+}
+
+#endif
