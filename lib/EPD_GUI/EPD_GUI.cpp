@@ -558,8 +558,16 @@ void EPD_ShowStringUTF8(uint16_t x, uint16_t y, const char *chr, uint16_t size1,
     u8g2_fonts->setFont(u8g2_font_9x15_tf);  // 9x15 pixel font with Latin-1
   } else if (size1 <= 24) {
     u8g2_fonts->setFont(u8g2_font_helvR14_tf); // 14pt Helvetica with Latin-1
-  } else {
+  } else if (size1 <= 48) {
     u8g2_fonts->setFont(u8g2_font_helvR18_tf); // 18pt Helvetica with Latin-1
+  } else if (size1 <= 62) {
+    u8g2_fonts->setFont(u8g2_font_logisoso50_tf); // 50px Logisoso
+  } else if (size1 <= 78) {
+    u8g2_fonts->setFont(u8g2_font_logisoso62_tn); // 62px Logisoso (numbers only)
+  } else if (size1 <= 92) {
+    u8g2_fonts->setFont(u8g2_font_logisoso78_tn); // 78px Logisoso (numbers only)
+  } else {
+    u8g2_fonts->setFont(u8g2_font_logisoso92_tn); // 92px Logisoso (numbers only)
   }
   
   // Set foreground and background colors
@@ -593,8 +601,16 @@ int EPD_GetUTF8TextWidth(const char *chr, uint16_t size1)
     u8g2_fonts->setFont(u8g2_font_9x15_tf);
   } else if (size1 <= 24) {
     u8g2_fonts->setFont(u8g2_font_helvR14_tf);
-  } else {
+  } else if (size1 <= 48) {
     u8g2_fonts->setFont(u8g2_font_helvR18_tf);
+  } else if (size1 <= 62) {
+    u8g2_fonts->setFont(u8g2_font_logisoso50_tf);
+  } else if (size1 <= 78) {
+    u8g2_fonts->setFont(u8g2_font_logisoso62_tn);
+  } else if (size1 <= 92) {
+    u8g2_fonts->setFont(u8g2_font_logisoso78_tn);
+  } else {
+    u8g2_fonts->setFont(u8g2_font_logisoso92_tn);
   }
   
   return u8g2_fonts->getUTF8Width(chr);

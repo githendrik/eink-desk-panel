@@ -11,6 +11,7 @@
 
 String temperature;
 String aareTemp;
+String aareText;
 String pollenLevel;
 String weight;
 String weightTrend;
@@ -165,7 +166,12 @@ void fetch_weight_data(int& httpResponseCode) {
           double latestWeight = (double)weightObject["body"]["measuregrps"][0]["measures"][0]["value"];
           weight = String(latestWeight / 1000.0, 1);
           
-          if (groupsCount >= 2) {
+          // Check if measurement is stale (older than 7 days)
+          long measureDate = (long)weightObject["body"]["measuregrps"][0]["date"];
+          long sevenDays = 7 * 24 * 60 * 60;
+          if ((now - measureDate) > sevenDays) {
+            weightTrend = "STALE";
+          } else if (groupsCount >= 2) {
             int oldMeasuresCount = weightObject["body"]["measuregrps"][groupsCount - 1]["measures"].length();
             if (oldMeasuresCount > 0) {
               double oldWeight = (double)weightObject["body"]["measuregrps"][groupsCount - 1]["measures"][0]["value"];
@@ -289,9 +295,13 @@ void fetch_weather_data(int& httpResponseCode) {
     }
 
     aareTemp = String((int)round((double)aareObject["aare"]));
+    aareText = JSON.stringify(aareObject["text"]);
+    aareText.replace("\"", "");
 
     Serial.print("String aare temp: ");
     Serial.println(aareTemp);
+    Serial.print("Aare text: ");
+    Serial.println(aareText);
   } else {
     Serial.print("Aare API error: ");
     Serial.println(httpResponseCode);
@@ -299,6 +309,10 @@ void fetch_weather_data(int& httpResponseCode) {
 
   httpAare.end();
 }
+
+
+
+
 
 void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   static char buffer[64];
@@ -315,21 +329,83 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   EPD_Full(WHITE);
   EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
 
-  memset(buffer, 0, sizeof(buffer));
-  snprintf(buffer, sizeof(buffer), "%s°", temperature.c_str());
-  EPD_ShowStringUTF8(120, 60, buffer, 72, BLACK);
+  int midX = EPD_W / 2;
+  int topHeight = EPD_H - 70;  // Give temps 70%+ of screen
 
-  memset(buffer, 0, sizeof(buffer));
-  snprintf(buffer, sizeof(buffer), "Pollen %s", pollenLevel.c_str());
-  EPD_ShowStringUTF8(120, 140, buffer, 20, BLACK);
+  // Font size for temperatures (78px Logisoso - numbers only)
+  int tempFontSize = 78;
 
-  memset(buffer, 0, sizeof(buffer));
-  snprintf(buffer, sizeof(buffer), "Weight %s kg (%s)", weight.c_str(), weightTrend.c_str());
-  EPD_ShowStringUTF8(120, 180, buffer, 20, BLACK);
+  // Center points for left and right columns
+  int leftCenter = midX / 2 - 10;
+  int rightCenter = midX + midX / 2 - 10;
 
+  // Top-left: Bern Temperature
   memset(buffer, 0, sizeof(buffer));
-  snprintf(buffer, sizeof(buffer), "Aare %s°", aareTemp.c_str());
-  EPD_ShowStringUTF8(120, 220, buffer, 20, BLACK);
+  snprintf(buffer, sizeof(buffer), "%s", temperature.c_str());
+  int tempWidth = EPD_GetUTF8TextWidth(buffer, tempFontSize);
+  EPD_ShowStringUTF8(leftCenter - tempWidth / 2, 30, buffer, tempFontSize, BLACK);
+  
+  // Draw degree symbol smaller next to temperature
+  int degX = leftCenter + tempWidth / 2 + 2;
+  EPD_ShowStringUTF8(degX, 30, "o", 16, BLACK);
+  
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "Bern");
+  int labelWidth = EPD_GetUTF8TextWidth(buffer, 16);
+  EPD_ShowStringUTF8(leftCenter - labelWidth / 2, 115, buffer, 16, BLACK);
+
+  // Top-right: Aare Temperature
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "%s", aareTemp.c_str());
+  int aareWidth = EPD_GetUTF8TextWidth(buffer, tempFontSize);
+  EPD_ShowStringUTF8(rightCenter - aareWidth / 2, 30, buffer, tempFontSize, BLACK);
+  
+  // Draw degree symbol smaller next to temperature
+  degX = rightCenter + aareWidth / 2 + 2;
+  EPD_ShowStringUTF8(degX, 30, "o", 16, BLACK);
+  
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "Aare");
+  labelWidth = EPD_GetUTF8TextWidth(buffer, 16);
+  EPD_ShowStringUTF8(rightCenter - labelWidth / 2, 115, buffer, 16, BLACK);
+
+  // Middle: AareGuru text, centered
+  if (aareText.length() > 0) {
+    // Truncate to fit display width with margin
+    int maxWidth = EPD_W - 40;
+    char aareTextBuf[64];
+    strncpy(aareTextBuf, aareText.c_str(), sizeof(aareTextBuf) - 1);
+    aareTextBuf[sizeof(aareTextBuf) - 1] = '\0';
+    // Trim until it fits
+    while (strlen(aareTextBuf) > 0 && EPD_GetUTF8TextWidth(aareTextBuf, 16) > maxWidth) {
+      aareTextBuf[strlen(aareTextBuf) - 1] = '\0';
+    }
+    int aareTextWidth = EPD_GetUTF8TextWidth(aareTextBuf, 16);
+    EPD_ShowStringUTF8(midX - aareTextWidth / 2, 170, aareTextBuf, 16, BLACK);
+  }
+
+  // Bottom-left: Pollen
+  int bottomY = topHeight + 10;
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "%s", pollenLevel.c_str());
+  int pollenWidth = EPD_GetUTF8TextWidth(buffer, 24);
+  EPD_ShowStringUTF8(leftCenter - pollenWidth / 2, bottomY, buffer, 24, BLACK);
+  
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "Pollen");
+  int pollenLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
+  EPD_ShowStringUTF8(leftCenter - pollenLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
+
+  // Bottom-right: Weight + trend
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "%s kg", weight.c_str());
+  int weightWidth = EPD_GetUTF8TextWidth(buffer, 24);
+  EPD_ShowStringUTF8(rightCenter - weightWidth / 2, bottomY, buffer, 24, BLACK);
+  
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "%s", weightTrend.c_str());
+  int trendWidth = EPD_GetUTF8TextWidth(buffer, 12);
+  EPD_ShowStringUTF8(rightCenter - trendWidth / 2, bottomY + 28, buffer, 12, BLACK);
 
   EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
 }
