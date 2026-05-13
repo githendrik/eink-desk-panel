@@ -13,8 +13,8 @@ String temperature;
 String aareTemp;
 String aareText;
 String pollenLevel;
-String weight;
-String weightTrend;
+String weight = "--.-";
+String weightTrend = "n/a";
 
 String openWeatherMapApiKey = OPENWEATHER_API_KEY;
 String cityId = "2661552";
@@ -62,10 +62,10 @@ void fetch_withings_token(int& httpResponseCode) {
   client.setInsecure();
   HTTPClient http;
   
-  http.begin(client, "https://oauth2.withings.com/v2/oauth2/token");
+  http.begin(client, "https://wbsapi.withings.net/v2/oauth2");
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
-  String postData = "grant_type=refresh_token&refresh_token=" + withingsRefreshToken + 
+  String postData = "action=requesttoken&grant_type=refresh_token&refresh_token=" + withingsRefreshToken + 
                     "&client_id=" + withingsClientId + 
                     "&client_secret=" + withingsClientSecret;
   
@@ -73,14 +73,24 @@ void fetch_withings_token(int& httpResponseCode) {
   
   if (httpResponseCode == 200) {
     String payload = http.getString();
-    Serial.println("Withings token refreshed successfully");
+    Serial.println("Withings token response:");
+    Serial.println(payload);
     
     JSONVar tokenObject = JSON.parse(payload);
     
     if (JSON.typeof(tokenObject) != "undefined") {
-      String token = JSON.stringify(tokenObject["access_token"]);
-      token.replace("\"", "");
-      withingsAccessToken = token;
+      // New endpoint returns token inside body object
+      String token;
+      if (JSON.typeof(tokenObject["body"]["access_token"]) != "undefined") {
+        token = JSON.stringify(tokenObject["body"]["access_token"]);
+      } else if (JSON.typeof(tokenObject["access_token"]) != "undefined") {
+        token = JSON.stringify(tokenObject["access_token"]);
+      }
+      if (token.length() > 0) {
+        token.replace("\"", "");
+        withingsAccessToken = token;
+        Serial.println("Token updated successfully");
+      }
     }
   } else {
     Serial.print("Failed to refresh Withings token. HTTP code: ");
@@ -151,6 +161,18 @@ void fetch_weight_data(int& httpResponseCode) {
       Serial.print("Error: ");
       String errorMsg = JSON.stringify(weightObject["error"]);
       Serial.println(errorMsg);
+      
+      // Status 401 = expired token, refresh and retry
+      if (apiStatus == 401) {
+        Serial.println("Token expired (API status 401), refreshing...");
+        http.end();
+        fetch_withings_token(httpResponseCode);
+        if (httpResponseCode == 200) {
+          fetch_weight_data(httpResponseCode);
+        }
+        return;
+      }
+      
       http.end();
       return;
     }
@@ -198,6 +220,12 @@ void fetch_weight_data(int& httpResponseCode) {
   } else if (httpResponseCode == 401) {
     Serial.println("Token expired, refreshing...");
     fetch_withings_token(httpResponseCode);
+    if (httpResponseCode == 200) {
+      Serial.println("Token refreshed, retrying weight fetch...");
+      http.end();
+      fetch_weight_data(httpResponseCode);
+      return;
+    }
   } else {
     Serial.print("Withings API error: ");
     Serial.println(httpResponseCode);
