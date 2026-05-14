@@ -40,6 +40,8 @@ void setup() {
   Serial.print("Time set: ");
   Serial.println(ctime(&now));
 
+  loadWithingsTokens();
+
   fetch_weather_data(httpResponseCode);
   fetch_weight_data(httpResponseCode);
 

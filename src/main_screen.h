@@ -5,9 +5,12 @@
 #include <HTTPClient.h>
 #include <Arduino_JSON.h>
 #include <time.h>
+#include <Preferences.h>
 #include "EPD.h"
 #include "EPD_GUI.h"
 #include "credentials.h"
+
+Preferences prefs;
 
 String temperature;
 String aareTemp;
@@ -24,6 +27,30 @@ String withingsClientSecret = WITHINGS_CLIENT_SECRET;
 String withingsAccessToken = WITHINGS_ACCESS_TOKEN;
 String withingsRefreshToken = WITHINGS_REFRESH_TOKEN;
 String withingsUserId = WITHINGS_USER_ID;
+
+void loadWithingsTokens() {
+  prefs.begin("withings", true);  // read-only
+  String storedAccess = prefs.getString("access_token", "");
+  String storedRefresh = prefs.getString("refresh_token", "");
+  prefs.end();
+  
+  if (storedAccess.length() > 0) {
+    withingsAccessToken = storedAccess;
+    Serial.println("Loaded access token from NVS");
+  }
+  if (storedRefresh.length() > 0) {
+    withingsRefreshToken = storedRefresh;
+    Serial.println("Loaded refresh token from NVS");
+  }
+}
+
+void saveWithingsTokens() {
+  prefs.begin("withings", false);  // read-write
+  prefs.putString("access_token", withingsAccessToken);
+  prefs.putString("refresh_token", withingsRefreshToken);
+  prefs.end();
+  Serial.println("Saved tokens to NVS");
+}
 
 String jsonBuffer;
 JSONVar myObject;
@@ -61,6 +88,7 @@ void fetch_withings_token(int& httpResponseCode) {
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient http;
+  http.setTimeout(10000);
   
   http.begin(client, "https://wbsapi.withings.net/v2/oauth2");
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
@@ -79,16 +107,33 @@ void fetch_withings_token(int& httpResponseCode) {
     JSONVar tokenObject = JSON.parse(payload);
     
     if (JSON.typeof(tokenObject) != "undefined") {
+      int tokenStatus = (int)round((double)tokenObject["status"]);
+      if (tokenStatus != 0) {
+        Serial.print("Token refresh failed, status: ");
+        Serial.println(tokenStatus);
+        httpResponseCode = -1;
+        http.end();
+        return;
+      }
       // New endpoint returns token inside body object
       String token;
+      String newRefresh;
       if (JSON.typeof(tokenObject["body"]["access_token"]) != "undefined") {
         token = JSON.stringify(tokenObject["body"]["access_token"]);
       } else if (JSON.typeof(tokenObject["access_token"]) != "undefined") {
         token = JSON.stringify(tokenObject["access_token"]);
       }
+      if (JSON.typeof(tokenObject["body"]["refresh_token"]) != "undefined") {
+        newRefresh = JSON.stringify(tokenObject["body"]["refresh_token"]);
+      }
       if (token.length() > 0) {
         token.replace("\"", "");
         withingsAccessToken = token;
+        if (newRefresh.length() > 0) {
+          newRefresh.replace("\"", "");
+          withingsRefreshToken = newRefresh;
+        }
+        saveWithingsTokens();
         Serial.println("Token updated successfully");
       }
     }
@@ -100,7 +145,7 @@ void fetch_withings_token(int& httpResponseCode) {
   http.end();
 }
 
-void fetch_weight_data(int& httpResponseCode) {
+void fetch_weight_data(int& httpResponseCode, bool retry = true) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi Disconnected");
     return;
@@ -126,6 +171,7 @@ void fetch_weight_data(int& httpResponseCode) {
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient http;
+  http.setTimeout(10000);
   http.begin(client, serverPath);
   http.addHeader("Authorization", "Bearer " + withingsAccessToken);
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
@@ -162,17 +208,22 @@ void fetch_weight_data(int& httpResponseCode) {
       String errorMsg = JSON.stringify(weightObject["error"]);
       Serial.println(errorMsg);
       
-      // Status 401 = expired token, refresh and retry
-      if (apiStatus == 401) {
+      // Status 401 = expired token, refresh and retry once
+      if (apiStatus == 401 && retry) {
         Serial.println("Token expired (API status 401), refreshing...");
         http.end();
         fetch_withings_token(httpResponseCode);
         if (httpResponseCode == 200) {
-          fetch_weight_data(httpResponseCode);
+          fetch_weight_data(httpResponseCode, false);
+        } else {
+          weight = "--.-";
+          weightTrend = "err";
         }
         return;
       }
       
+      weight = "--.-";
+      weightTrend = "err";
       http.end();
       return;
     }
@@ -217,13 +268,13 @@ void fetch_weight_data(int& httpResponseCode) {
         weightTrend = "n/a";
       }
     }
-  } else if (httpResponseCode == 401) {
+  } else if (httpResponseCode == 401 && retry) {
     Serial.println("Token expired, refreshing...");
     fetch_withings_token(httpResponseCode);
     if (httpResponseCode == 200) {
       Serial.println("Token refreshed, retrying weight fetch...");
       http.end();
-      fetch_weight_data(httpResponseCode);
+      fetch_weight_data(httpResponseCode, false);
       return;
     }
   } else {
@@ -304,8 +355,6 @@ void fetch_weather_data(int& httpResponseCode) {
 
   httpPollen.end();
 
-  fetch_weight_data(httpResponseCode);
-
   String aareServerPath = "http://aareguru.existenz.ch/v2018/today?city=bern&app=li.richert.smartframe&version=0.0.1";
   HTTPClient httpAare;
   httpAare.begin(client, aareServerPath);
@@ -336,6 +385,8 @@ void fetch_weather_data(int& httpResponseCode) {
   }
 
   httpAare.end();
+
+  fetch_weight_data(httpResponseCode);
 }
 
 
