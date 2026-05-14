@@ -20,6 +20,12 @@ String rainStatus;  // empty = no rain, otherwise "Rain in Xh" or "Raining"
 String weight = "--.-";
 String weightTrend = "n/a";
 
+String stravaActivity = "";      // e.g. "Run 5.2km" or "Ride 32km"
+String stravaActivityDate = "";  // e.g. "2h ago" or "3d ago"
+
+// Bottom-right display mode: 0 = strava (default for now), 1 = weight
+int bottomRightMode = 1;
+
 String openWeatherMapApiKey = OPENWEATHER_API_KEY;
 String cityId = "2661552";
 
@@ -28,6 +34,11 @@ String withingsClientSecret = WITHINGS_CLIENT_SECRET;
 String withingsAccessToken = WITHINGS_ACCESS_TOKEN;
 String withingsRefreshToken = WITHINGS_REFRESH_TOKEN;
 String withingsUserId = WITHINGS_USER_ID;
+
+String stravaClientId = STRAVA_CLIENT_ID;
+String stravaClientSecret = STRAVA_CLIENT_SECRET;
+String stravaAccessToken = STRAVA_ACCESS_TOKEN;
+String stravaRefreshToken = STRAVA_REFRESH_TOKEN;
 
 void loadWithingsTokens() {
   prefs.begin("withings", true);  // read-only
@@ -288,6 +299,173 @@ void fetch_weight_data(int& httpResponseCode, bool retry = true) {
   http.end();
 }
 
+// --- Strava ---
+
+void loadStravaTokens() {
+  prefs.begin("strava", true);
+  String storedAccess = prefs.getString("access_token", "");
+  String storedRefresh = prefs.getString("refresh_token", "");
+  prefs.end();
+  
+  if (storedAccess.length() > 0) {
+    stravaAccessToken = storedAccess;
+    Serial.println("Loaded Strava access token from NVS");
+  }
+  if (storedRefresh.length() > 0) {
+    stravaRefreshToken = storedRefresh;
+    Serial.println("Loaded Strava refresh token from NVS");
+  }
+}
+
+void saveStravaTokens() {
+  prefs.begin("strava", false);
+  prefs.putString("access_token", stravaAccessToken);
+  prefs.putString("refresh_token", stravaRefreshToken);
+  prefs.end();
+  Serial.println("Saved Strava tokens to NVS");
+}
+
+void fetch_strava_token(int& httpResponseCode) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.setTimeout(10000);
+  
+  http.begin(client, "https://www.strava.com/oauth/token");
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  
+  String postData = "client_id=" + stravaClientId + 
+                    "&client_secret=" + stravaClientSecret +
+                    "&grant_type=refresh_token" +
+                    "&refresh_token=" + stravaRefreshToken;
+  
+  httpResponseCode = http.POST(postData);
+  
+  if (httpResponseCode == 200) {
+    String payload = http.getString();
+    Serial.println("Strava token response:");
+    Serial.println(payload);
+    
+    JSONVar tokenObject = JSON.parse(payload);
+    if (JSON.typeof(tokenObject) != "undefined") {
+      if (JSON.typeof(tokenObject["access_token"]) != "undefined") {
+        String token = JSON.stringify(tokenObject["access_token"]);
+        token.replace("\"", "");
+        stravaAccessToken = token;
+      }
+      if (JSON.typeof(tokenObject["refresh_token"]) != "undefined") {
+        String refresh = JSON.stringify(tokenObject["refresh_token"]);
+        refresh.replace("\"", "");
+        stravaRefreshToken = refresh;
+      }
+      saveStravaTokens();
+      Serial.println("Strava token updated successfully");
+    }
+  } else {
+    Serial.print("Failed to refresh Strava token. HTTP code: ");
+    Serial.println(httpResponseCode);
+  }
+  
+  http.end();
+}
+
+String getActivityShortType(const String& type) {
+  if (type == "Run") return "Run";
+  if (type == "Ride") return "Ride";
+  if (type == "Swim") return "Swim";
+  if (type == "Walk") return "Walk";
+  if (type == "Hike") return "Hike";
+  if (type == "MountainBikeRide") return "MTB";
+  if (type == "GravelRide") return "Gravel";
+  if (type == "TrailRun") return "Trail";
+  if (type == "VirtualRide") return "Zwift";
+  if (type == "VirtualRun") return "VRun";
+  if (type == "WeightTraining") return "Gym";
+  if (type == "Yoga") return "Yoga";
+  return type.substring(0, 6);
+}
+
+void fetch_strava_data(int& httpResponseCode, bool retry = true) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.setTimeout(10000);
+  
+  http.begin(client, "https://www.strava.com/api/v3/athlete/activities?per_page=1&page=1");
+  http.addHeader("Authorization", "Bearer " + stravaAccessToken);
+  
+  httpResponseCode = http.GET();
+  Serial.print("Strava HTTP code: ");
+  Serial.println(httpResponseCode);
+  
+  if (httpResponseCode == 200) {
+    String stravaBuffer = http.getString();
+    Serial.println(stravaBuffer);
+    JSONVar activities = JSON.parse(stravaBuffer);
+    
+    if (JSON.typeof(activities) != "undefined" && activities.length() > 0) {
+      String type = JSON.stringify(activities[0]["type"]);
+      type.replace("\"", "");
+      String shortType = getActivityShortType(type);
+      
+      double distance = (double)activities[0]["distance"];
+      double distKm = distance / 1000.0;
+      
+      if (distKm >= 1.0) {
+        stravaActivity = shortType + " " + String(distKm, 1) + "km";
+      } else {
+        stravaActivity = shortType + " " + String((int)distance) + "m";
+      }
+      
+      // Show date of activity
+      String startDate = JSON.stringify(activities[0]["start_date_local"]);
+      startDate.replace("\"", "");
+      // ISO 8601: "2026-05-12T07:30:00Z" -> "12 May"
+      if (startDate.length() >= 10) {
+        int month = startDate.substring(5, 7).toInt();
+        int day = startDate.substring(8, 10).toInt();
+        const char* months[] = {"", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+        if (month >= 1 && month <= 12) {
+          stravaActivityDate = String(day) + " " + months[month];
+        } else {
+          stravaActivityDate = startDate.substring(0, 10);
+        }
+      }
+      
+      Serial.print("Strava activity: ");
+      Serial.print(stravaActivity);
+      Serial.print(" (");
+      Serial.print(stravaActivityDate);
+      Serial.println(")");
+    } else {
+      stravaActivity = "No activity";
+      stravaActivityDate = "";
+    }
+  } else if (httpResponseCode == 401 && retry) {
+    Serial.println("Strava token expired, refreshing...");
+    http.end();
+    fetch_strava_token(httpResponseCode);
+    if (httpResponseCode == 200) {
+      fetch_strava_data(httpResponseCode, false);
+      return;
+    } else {
+      stravaActivity = "auth err";
+      stravaActivityDate = "";
+    }
+  } else {
+    Serial.print("Strava API error: ");
+    Serial.println(httpResponseCode);
+    stravaActivity = "err";
+    stravaActivityDate = "";
+  }
+  
+  http.end();
+}
+
 void fetch_weather_data(int& httpResponseCode) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi Disconnected");
@@ -526,16 +704,32 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     EPD_ShowStringUTF8(leftCenter - pollenLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
   }
 
-  // Bottom-right: Weight + trend
-  memset(buffer, 0, sizeof(buffer));
-  snprintf(buffer, sizeof(buffer), "%s kg", weight.c_str());
-  int weightWidth = EPD_GetUTF8TextWidth(buffer, 24);
-  EPD_ShowStringUTF8(rightCenter - weightWidth / 2, bottomY, buffer, 24, BLACK);
-  
-  memset(buffer, 0, sizeof(buffer));
-  snprintf(buffer, sizeof(buffer), "%s", weightTrend.c_str());
-  int trendWidth = EPD_GetUTF8TextWidth(buffer, 12);
-  EPD_ShowStringUTF8(rightCenter - trendWidth / 2, bottomY + 28, buffer, 12, BLACK);
+  // Bottom-right: Strava or Weight (toggled by rocker switch)
+  if (bottomRightMode == 0 && stravaActivity.length() > 0) {
+    // Strava mode
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "%s", stravaActivity.c_str());
+    int stravaWidth = EPD_GetUTF8TextWidth(buffer, 24);
+    EPD_ShowStringUTF8(rightCenter - stravaWidth / 2, bottomY, buffer, 24, BLACK);
+    
+    if (stravaActivityDate.length() > 0) {
+      memset(buffer, 0, sizeof(buffer));
+      snprintf(buffer, sizeof(buffer), "%s", stravaActivityDate.c_str());
+      int dateWidth = EPD_GetUTF8TextWidth(buffer, 12);
+      EPD_ShowStringUTF8(rightCenter - dateWidth / 2, bottomY + 28, buffer, 12, BLACK);
+    }
+  } else {
+    // Weight mode
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "%s kg", weight.c_str());
+    int weightWidth = EPD_GetUTF8TextWidth(buffer, 24);
+    EPD_ShowStringUTF8(rightCenter - weightWidth / 2, bottomY, buffer, 24, BLACK);
+    
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "%s", weightTrend.c_str());
+    int trendWidth = EPD_GetUTF8TextWidth(buffer, 12);
+    EPD_ShowStringUTF8(rightCenter - trendWidth / 2, bottomY + 28, buffer, 12, BLACK);
+  }
 
   EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
 }
