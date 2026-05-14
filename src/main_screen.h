@@ -16,6 +16,7 @@ String temperature;
 String aareTemp;
 String aareText;
 String pollenLevel;
+String rainStatus;  // empty = no rain, otherwise "Rain in Xh" or "Raining"
 String weight = "--.-";
 String weightTrend = "n/a";
 
@@ -312,6 +313,15 @@ void fetch_weather_data(int& httpResponseCode) {
 
     temperature = String((int)round((double)myObject["main"]["temp"]));
 
+    // Check if currently raining (weather IDs 2xx=thunderstorm, 3xx=drizzle, 5xx=rain)
+    int weatherId = (int)round((double)myObject["weather"][0]["id"]);
+    if (weatherId >= 200 && weatherId < 600) {
+      rainStatus = "Raining";
+      Serial.println("Currently raining");
+    } else {
+      rainStatus = "";
+    }
+
     Serial.print("String Temperature: ");
     Serial.println(temperature);
   } else {
@@ -322,6 +332,35 @@ void fetch_weather_data(int& httpResponseCode) {
   }
 
   http.end();
+
+  // Check forecast for upcoming rain (if not currently raining)
+  if (rainStatus.length() == 0) {
+    String forecastPath = "http://api.openweathermap.org/data/2.5/forecast?id=" + cityId + "&APPID=" + openWeatherMapApiKey + "&units=metric&cnt=8";
+    HTTPClient httpForecast;
+    httpForecast.begin(client, forecastPath);
+    httpResponseCode = httpForecast.GET();
+
+    if (httpResponseCode == 200) {
+      String forecastBuffer = httpForecast.getString();
+      JSONVar forecastObject = JSON.parse(forecastBuffer);
+
+      if (JSON.typeof(forecastObject) != "undefined" && JSON.typeof(forecastObject["list"]) != "undefined") {
+        int listCount = forecastObject["list"].length();
+        for (int i = 0; i < listCount; i++) {
+          int fId = (int)round((double)forecastObject["list"][i]["weather"][0]["id"]);
+          if (fId >= 200 && fId < 600) {
+            // Each forecast slot is 3 hours apart
+            int hoursAway = (i + 1) * 3;
+            rainStatus = "Rain in " + String(hoursAway) + "h";
+            Serial.print("Rain forecast: ");
+            Serial.println(rainStatus);
+            break;
+          }
+        }
+      }
+    }
+    httpForecast.end();
+  }
 
   String pollenServerPath = "http://api.openweathermap.org/data/2.5/air_pollution?lat=46.9480&lon=7.4474&appid=" + openWeatherMapApiKey;
   HTTPClient httpPollen;
@@ -463,17 +502,29 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     EPD_ShowStringUTF8(midX - aareTextWidth / 2, 170, aareTextBuf, 16, BLACK);
   }
 
-  // Bottom-left: Pollen
+  // Bottom-left: Rain status (if raining/forecast) or Pollen
   int bottomY = topHeight + 10;
-  memset(buffer, 0, sizeof(buffer));
-  snprintf(buffer, sizeof(buffer), "%s", pollenLevel.c_str());
-  int pollenWidth = EPD_GetUTF8TextWidth(buffer, 24);
-  EPD_ShowStringUTF8(leftCenter - pollenWidth / 2, bottomY, buffer, 24, BLACK);
-  
-  memset(buffer, 0, sizeof(buffer));
-  snprintf(buffer, sizeof(buffer), "Pollen");
-  int pollenLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
-  EPD_ShowStringUTF8(leftCenter - pollenLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
+  if (rainStatus.length() > 0) {
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "%s", rainStatus.c_str());
+    int rainWidth = EPD_GetUTF8TextWidth(buffer, 24);
+    EPD_ShowStringUTF8(leftCenter - rainWidth / 2, bottomY, buffer, 24, BLACK);
+    
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "Weather");
+    int rainLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
+    EPD_ShowStringUTF8(leftCenter - rainLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
+  } else {
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "%s", pollenLevel.c_str());
+    int pollenWidth = EPD_GetUTF8TextWidth(buffer, 24);
+    EPD_ShowStringUTF8(leftCenter - pollenWidth / 2, bottomY, buffer, 24, BLACK);
+    
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "Pollen");
+    int pollenLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
+    EPD_ShowStringUTF8(leftCenter - pollenLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
+  }
 
   // Bottom-right: Weight + trend
   memset(buffer, 0, sizeof(buffer));
