@@ -98,7 +98,7 @@ void loop() {
     display_main_screen(ImageBW, forceFullRefresh);
   }
 
-  if (millis() - lastWeatherFetch >= 1000UL*60*60) {
+  if (millis() - lastWeatherFetch >= 1000UL*60*15) {
     Serial.println("Fetching weather data...");
     fetch_weather_data(httpResponseCode);
     lastWeatherFetch = millis();

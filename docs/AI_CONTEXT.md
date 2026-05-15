@@ -2,156 +2,146 @@
 
 ## Purpose
 
-This document provides context for AI agents working on this project. It explains the codebase structure, conventions, and common patterns.
+This document provides context for AI agents working on this project.
+
+## IMPORTANT: Keep Docs Updated
+
+**After completing any task, always update the relevant docs in `docs/` to reflect changes.** This ensures context is preserved across sessions and models. Key files to check:
+
+- `AI_CONTEXT.md` — Update if new pins, coordinates, patterns, or pitfalls are discovered
+- `PROJECT_OVERVIEW.md` — Update if architecture, layout, APIs, or refresh intervals change
+- `API_REFERENCE.md` — Update if API endpoints, auth, or response fields change
+- `V2_CHANGES.md` — Update if significant features are added or removed
+- `WITHINGS_SETUP.md` — Update if token management or setup steps change
+- `GETTING_STARTED.md` — Update if setup steps change
+
+## Critical Facts
+
+- **Display**: 400x300 pixels, e-ink (SSD1683), SPI
+- **Board**: Freenove ESP32-S3 WROOM (CrowPanel 4.2")
+- **Serial port**: `/dev/cu.usbserial-110` (can change to `-210` on replug)
+- **Upload command**: `~/.platformio/penv/bin/pio run -t upload` (plain `pio` not in PATH)
+- **Serial monitor**: `pio device monitor` broken; use Python `serial.Serial` instead
+- **User location**: Bern, Switzerland
+- **WiFi SSID**: `Hello@richert.li`
+
+## File Map
+
+| File | Purpose |
+|------|---------|
+| `src/main.ino` | Entry point, WiFi/NTP setup, fetch/display loop, rocker switch ISR |
+| `src/main_screen.h` | All API fetch functions, data parsing, display rendering |
+| `src/credentials.h` | API keys + tokens (gitignored) |
+| `lib/EPD_GUI/EPD_GUI.cpp` | Font rendering with U8g2 integration, drawing primitives |
+| `lib/EPD_GUI/EPD_GUI.h` | GUI function declarations |
+| `lib/EPD_GUI/EPD_font.h` | Built-in bitmap fonts (max 48px) |
+| `lib/EPD/EPD.h` | Display driver (EPD_Init, EPD_Display_Part, etc.) |
+| `platformio.ini` | Board config, library deps, port settings |
 
 ## Code Conventions
 
-### File Organization
-- `.ino` file in `src/` contains main entry point
-- `.h` files in `src/` contain screen implementation
-- `.h` files in `include/` contain assets (bitmap data, logos)
-- `.cpp` files in `lib/` contain library implementations
+- **Functions**: `snake_case` (e.g., `fetch_weather_data`, `display_main_screen`)
+- **Variables**: `camelCase` (e.g., `withingsAccessToken`, `bottomRightMode`)
+- **Constants**: `UPPER_CASE` (e.g., `EPD_W`, `WIFI_SSID`, `PRV_KEY`)
+- **HTTP pattern**: `WiFiClient`/`WiFiClientSecure` + `HTTPClient`, always call `http.end()`
+- **JSON parsing**: `Arduino_JSON` library, check `JSON.typeof()` before accessing
+- **Token storage**: NVS via `Preferences` library, namespaces: `"withings"`, `"strava"`
 
-### Naming Conventions
-- **Functions**: `snake_case` (e.g., `fetch_weather_data`, `display_weather_screen`)
-- **Variables**: `camelCase` for local, `snake_case` for globals
-- **Constants**: `UPPER_CASE` (e.g., `EPD_W`, `WIFI_SSID`)
-- **Files**: `snake_case` (e.g., `weather_screen.h`, `main.ino`)
+## Display Layout Coordinates
 
-## Key Global Variables
+```
+EPD_W = 400, EPD_H = 300
 
-### Display State
-- `ImageBW`: Frame buffer for the display (15000 bytes)
-- `forceFullRefresh`: Flag to trigger full screen refresh on boot
+leftCenter  = midX/2 - 10  = 90   (left column center)
+rightCenter = midX + midX/2 - 10 = 290 (right column center)
+midX = 200
 
-### Weather Data
-- `weather`: Weather condition string
-- `temperature`: Current temperature
-- `temperatureMin`: Minimum temperature
-- `temperatureMax`: Maximum temperature
-- `aareTemp`: Aare river temperature
-- `aareText`: Swimming condition text
-- `aareTime`: Timestamp of Aare reading
-
-### WiFi
-- `WIFI_SSID`, `WIFI_PASSWORD`: From credentials.h
-- `WiFi.status()`: Check connection status
-
-### HTTP
-- `httpResponseCode`: Variable for HTTP response codes
-
-## Display Functions (from EPD_GUI)
-
-- `EPD_GPIOInit()`: Initialize display GPIO
-- `EPD_Init()`: Initialize display (full refresh mode)
-- `EPD_Init_Fast(mode)`: Initialize in fast refresh mode
-- `EPD_Clear()`: Clear display (full white)
-- `EPD_Full(color)`: Fill display with color
-- `EPD_ShowStringUTF8(x, y, text, font_size, color)`: Display text
-- `EPD_GetUTF8TextWidth(text, font_size)`: Get text width
-- `EPD_ShowPicture(x, y, w, h, index, color)`: Display bitmap
-- `EPD_DrawLine(x1, y1, x2, y2, color)`: Draw line
-- `EPD_Display_Part(x, y, w, h, image)`: Partial refresh of region
-
-## Credentials Management
-
-The `credentials.h` file contains sensitive data and should NOT be committed:
-```cpp
-#ifndef CREDENTIALS_H
-#define CREDENTIALS_H
-
-const char* WIFI_SSID = "your_ssid";
-const char* WIFI_PASSWORD = "your_password";
-const char* OPENWEATHER_API_KEY = "your_api_key";
-const char* WEATHER_CITY = "Bern";
-
-#endif
+Temperature Y: 30 (78px font, Logisoso numbers-only)
+Degree symbol: next to temp, 16px "o"
+Location labels ("Bern"/"Aare"): Y=115, 16px
+AareGuru text: Y=170, 16px, centered at midX
+topHeight = EPD_H - 70 = 230
+bottomY = topHeight + 10 = 240
+Bottom values: 24px
+Bottom labels: Y = bottomY + 28, 12px
 ```
 
-## Common Patterns
+## Rocker Switch
 
-### HTTP Request Pattern
+- GPIO 6 (`PRV_KEY`): previous button
+- GPIO 4 (`NEXT_KEY`): next button
+- Both configured with `INPUT_PULLUP` + ISR on `FALLING` edge
+- 200ms debounce
+- Currently toggles `bottomRightMode` between 0 (Strava) and 1 (Weight, default)
+
+## Token Management Pattern
+
+Both Withings and Strava use OAuth2 with **single-use refresh tokens**:
+
+1. On boot: load tokens from NVS, fall back to `credentials.h`
+2. On API call: if 401, refresh token and retry (max 1 retry)
+3. On successful refresh: save BOTH access_token AND refresh_token to NVS
+4. Withings token endpoint: `POST https://wbsapi.withings.net/v2/oauth2` with `action=requesttoken`
+   - NOT `oauth2.withings.com` (DNS fails on ESP32)
+   - Response wraps tokens in `body` object, check `status` field for errors
+5. Strava token endpoint: `POST https://www.strava.com/oauth/token`
+6. All HTTPS clients use `client.setInsecure()` and `http.setTimeout(10000)`
+
+## Withings API Specifics
+
+- Endpoint: `POST https://wbsapi.withings.net/measure` with `action=getmeas`
+- Auth: `Bearer` token in header
+- Body: form-urlencoded with `startdate` and `enddate` (Unix timestamps)
+- NO `userid` parameter
+- Response: `body.measuregrps[0].measures[0].value` (divide by 1000 for kg)
+- Measurement date: `body.measuregrps[0].date` (Unix timestamp)
+- Shows "STALE" if last measurement > 7 days old
+- Weight trend: compares latest vs oldest measurement in 6-month window
+
+## Rain Detection
+
+- Current rain: check `weather[0].id` from current weather (200-599 = precipitation)
+- Forecast rain: `GET /data/2.5/forecast?cnt=8` (8 slots × 3h = 24h ahead)
+- When rain detected, replaces pollen display with "Raining" or "Rain in Xh"
+
+## Strava API
+
+- Endpoint: `GET https://www.strava.com/api/v3/athlete/activities?per_page=1&page=1`
+- Auth: `Bearer` token in header
+- Access tokens expire every 6 hours
+- Shows: activity type + distance (e.g. "Run 5.2km") with date (e.g. "12 May")
+- Activity types mapped to short names (MountainBikeRide→MTB, TrailRun→Trail, etc.)
+
+## Common Pitfalls
+
+1. `pio` command not in PATH — use `~/.platformio/penv/bin/pio`
+2. Serial port changes on USB replug — check `ls /dev/cu.usb*`
+3. Withings refresh tokens are single-use — must save new one on every refresh
+4. Recursive retry on token failure causes stack overflow — always limit retries
+5. `EPD_ShowPicture` bitmap format: MSB first, inverted color logic
+6. Numbers-only fonts (`_tn`) can't render degree symbol — use separate small "o"
+7. ESP32 `time_t` from NTP — check `now < 1000000000` before using timestamps
+
+## Debugging
+
+- Serial output only available at boot (no real-time monitor working)
+- Reset device via DTR toggle for serial capture: `s.setDTR(False); sleep(0.1); s.setDTR(True)`
+- Or use Python: `serial.Serial('/dev/cu.usbserial-110', 115200, timeout=2)`
+- All API responses are printed to Serial for debugging
+
+## Credentials Template
+
 ```cpp
-WiFiClient client;
-HTTPClient http;
-http.begin(client, "https://api.example.com/endpoint");
-int httpResponseCode = http.GET();
-if (httpResponseCode == 200) {
-    String payload = http.getString();
-    // Parse JSON...
-}
-http.end();
+#define WIFI_SSID "..."
+#define WIFI_PASSWORD "..."
+#define OPENWEATHER_API_KEY "..."
+#define WITHINGS_CLIENT_ID "..."
+#define WITHINGS_CLIENT_SECRET "..."
+#define WITHINGS_ACCESS_TOKEN "..."
+#define WITHINGS_REFRESH_TOKEN "..."
+#define WITHINGS_USER_ID "..."
+#define STRAVA_CLIENT_ID "..."
+#define STRAVA_CLIENT_SECRET "..."
+#define STRAVA_ACCESS_TOKEN "..."
+#define STRAVA_REFRESH_TOKEN "..."
 ```
-
-### JSON Parsing Pattern
-```cpp
-JSONVar responseObject = JSON.parse(payload);
-if (JSON.typeof(responseObject) == "undefined") {
-    // Handle parse error
-}
-String value = JSON.stringify(responseObject["key"]);
-value.replace("\"", ""); // Remove quotes
-```
-
-### Display Update Pattern
-```cpp
-void display_weather_screen(uint8_t* ImageBW, bool& forceFullRefresh)
-{
-    if (forceFullRefresh) {
-        EPD_Init();
-        EPD_Clear();
-        forceFullRefresh = false;
-    }
-    EPD_Init_Fast(Fast_Seconds_1_5s);
-    Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
-    EPD_Full(WHITE);
-    // ... draw content ...
-    EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
-}
-```
-
-## Common Tasks for AI Agents
-
-### Modifying Weather Data Source
-1. Edit `fetch_weather_data()` in `src/weather_screen.h`
-2. Update API endpoint and parsing logic
-3. Test with serial monitor output
-
-### Changing Display Layout
-1. Edit `display_weather_screen()` in `src/weather_screen.h`
-2. Adjust coordinates and font sizes
-3. Test with partial refresh (set `forceFullRefresh = false`)
-
-### Adding New Data Fields
-1. Add global variables in `src/weather_screen.h`
-2. Update `fetch_weather_data()` to retrieve new data
-3. Update `display_weather_screen()` to show new data
-
-### Changing Refresh Interval
-Edit `src/main.ino`:
-```cpp
-if (millis() - lastWeatherFetch >= 1000*60*60) { // Change interval here
-```
-
-## Debugging Tips
-
-- Use `Serial.println()` for debugging (output at 115200 baud)
-- Check `httpResponseCode` for API issues
-- Monitor `WiFi.status()` for connectivity problems
-- Use `forceFullRefresh = true` to force screen redraw
-
-## Testing Checklist
-
-- [ ] WiFi connects successfully
-- [ ] Weather API returns 200 status code
-- [ ] Aare API returns 200 status code
-- [ ] Display updates without artifacts
-- [ ] Partial refresh works (no full refresh flicker)
-- [ ] Hourly refresh timer works correctly
-
-## Known Limitations
-
-- Certificate verification disabled (`setInsecure()`) for simplicity
-- Credentials stored in plaintext (not committed to repo)
-- Single screen only (no multi-screen support)
-- No button input handling (removed from v2)
