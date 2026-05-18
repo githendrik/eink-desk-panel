@@ -16,7 +16,7 @@ String temperature;
 String aareTemp;
 String aareText;
 String pollenLevel;
-String rainStatus;  // empty = no rain, otherwise "Rain in Xh" or "Raining"
+String rainStatus;  // empty = no rain, otherwise "Rain in 3h/2h/1h", "Rain imminent", or "Raining"
 String weight = "--.-";
 String weightTrend = "n/a";
 
@@ -493,7 +493,8 @@ void fetch_weather_data(int& httpResponseCode) {
 
     // Check if currently raining (weather IDs 2xx=thunderstorm, 3xx=drizzle, 5xx=rain)
     int weatherId = (int)round((double)myObject["weather"][0]["id"]);
-    if (weatherId >= 200 && weatherId < 600) {
+    bool currentlyRaining = (weatherId >= 200 && weatherId < 600);
+    if (currentlyRaining) {
       rainStatus = "Raining";
       Serial.println("Currently raining");
     } else {
@@ -511,25 +512,55 @@ void fetch_weather_data(int& httpResponseCode) {
 
   http.end();
 
-  // Check forecast for upcoming rain (if not currently raining)
-  if (rainStatus.length() == 0) {
-    String forecastPath = "http://api.openweathermap.org/data/2.5/forecast?id=" + cityId + "&APPID=" + openWeatherMapApiKey + "&units=metric&cnt=8";
-    HTTPClient httpForecast;
-    httpForecast.begin(client, forecastPath);
-    httpResponseCode = httpForecast.GET();
+  // Check forecast for rain ending (if currently raining) or upcoming rain
+  String forecastPath = "http://api.openweathermap.org/data/2.5/forecast?id=" + cityId + "&APPID=" + openWeatherMapApiKey + "&units=metric&cnt=8";
+  HTTPClient httpForecast;
+  httpForecast.begin(client, forecastPath);
+  httpResponseCode = httpForecast.GET();
 
-    if (httpResponseCode == 200) {
-      String forecastBuffer = httpForecast.getString();
-      JSONVar forecastObject = JSON.parse(forecastBuffer);
+  if (httpResponseCode == 200) {
+    String forecastBuffer = httpForecast.getString();
+    JSONVar forecastObject = JSON.parse(forecastBuffer);
 
-      if (JSON.typeof(forecastObject) != "undefined" && JSON.typeof(forecastObject["list"]) != "undefined") {
-        int listCount = forecastObject["list"].length();
-        for (int i = 0; i < listCount; i++) {
-          int fId = (int)round((double)forecastObject["list"][i]["weather"][0]["id"]);
-          if (fId >= 200 && fId < 600) {
-            // Each forecast slot is 3 hours apart
-            int hoursAway = (i + 1) * 3;
-            rainStatus = "Rain in " + String(hoursAway) + "h";
+    if (JSON.typeof(forecastObject) != "undefined" && JSON.typeof(forecastObject["list"]) != "undefined") {
+      int listCount = forecastObject["list"].length();
+      time_t now = time(NULL);
+
+      for (int i = 0; i < listCount; i++) {
+        int fId = (int)round((double)forecastObject["list"][i]["weather"][0]["id"]);
+        bool isRain = fId >= 200 && fId < 600;
+
+        if (currentlyRaining) {
+          if (!isRain) {
+            time_t forecastDt = (time_t)(double)forecastObject["list"][i]["dt"];
+            int hoursAway = (forecastDt - now) / 3600;
+            if (hoursAway <= 3) {
+              if (hoursAway >= 2) {
+                rainStatus = "Rain ends in 3h";
+              } else if (hoursAway >= 1) {
+                rainStatus = "Rain ends in 2h";
+              } else {
+                rainStatus = "Rain end soon";
+              }
+              Serial.print("Rain ending: ");
+              Serial.println(rainStatus);
+            }
+            break;
+          }
+        } else {
+          if (isRain) {
+            time_t forecastDt = (time_t)(double)forecastObject["list"][i]["dt"];
+            int hoursAway = (forecastDt - now) / 3600;
+            if (hoursAway >= 4) break;
+            if (hoursAway >= 3) {
+              rainStatus = "Rain in 3h";
+            } else if (hoursAway >= 2) {
+              rainStatus = "Rain in 2h";
+            } else if (hoursAway >= 1) {
+              rainStatus = "Rain in 1h";
+            } else {
+              rainStatus = "Rain imminent";
+            }
             Serial.print("Rain forecast: ");
             Serial.println(rainStatus);
             break;
@@ -537,8 +568,8 @@ void fetch_weather_data(int& httpResponseCode) {
         }
       }
     }
-    httpForecast.end();
   }
+  httpForecast.end();
 
   String pollenServerPath = "http://api.openweathermap.org/data/2.5/air_pollution?lat=46.9480&lon=7.4474&appid=" + openWeatherMapApiKey;
   HTTPClient httpPollen;
