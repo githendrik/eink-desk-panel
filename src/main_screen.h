@@ -472,6 +472,7 @@ void fetch_weather_data(int& httpResponseCode) {
     return;
   }
 
+  bool currentlyRaining = false;
   String serverPath = "http://api.openweathermap.org/data/2.5/weather?id=" + cityId + "&APPID=" + openWeatherMapApiKey + "&units=metric";
   WiFiClient client;
   HTTPClient http;
@@ -493,7 +494,7 @@ void fetch_weather_data(int& httpResponseCode) {
 
     // Check if currently raining (weather IDs 2xx=thunderstorm, 3xx=drizzle, 5xx=rain)
     int weatherId = (int)round((double)myObject["weather"][0]["id"]);
-    bool currentlyRaining = (weatherId >= 200 && weatherId < 600);
+    currentlyRaining = (weatherId >= 200 && weatherId < 600);
     if (currentlyRaining) {
       rainStatus = "Raining";
       Serial.println("Currently raining");
