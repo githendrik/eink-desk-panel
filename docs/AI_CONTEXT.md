@@ -29,14 +29,19 @@ This document provides context for AI agents working on this project.
 
 | File | Purpose |
 |------|---------|
-| `src/main.ino` | Entry point, WiFi/NTP setup, fetch/display loop, rocker switch ISR |
-| `src/main_screen.h` | All API fetch functions, data parsing, display rendering |
-| `src/credentials.h` | API keys + tokens (gitignored) |
+| `src/main.ino` | Entry point, WiFiManager setup, NTP, OTA boot check, rocker switch ISR, fetch/display loop |
+| `src/main_screen.h` | API fetch functions, data parsing, display rendering, OTA progress screen, AP mode screen |
+| `src/config_manager.h` | ConfigManager class: per-service NVS load/save/clear |
+| `src/web_dashboard.h` | AsyncWebServer dashboard HTML + endpoints (/, /save, /reset, /status, /check-update, /apply-update) |
+| `src/ota_update.h` | OTA check (GitHub API) + download + apply via Update library, progress callback |
+| `partitions.csv` | nvs 20KB + otadata 8KB + app0 2MB + app1 2MB |
 | `lib/EPD_GUI/EPD_GUI.cpp` | Font rendering with U8g2 integration, drawing primitives |
 | `lib/EPD_GUI/EPD_GUI.h` | GUI function declarations |
 | `lib/EPD_GUI/EPD_font.h` | Built-in bitmap fonts (max 48px) |
 | `lib/EPD/EPD.h` | Display driver (EPD_Init, EPD_Display_Part, etc.) |
-| `platformio.ini` | Board config, library deps, port settings |
+| `platformio.ini` | Board config, library deps, custom partitions, build flags |
+| `.github/workflows/build.yml` | CI: build on v* tag push, create release with .bin |
+| `docs/OTA_AND_CONFIG_PLAN.md` | Full implementation plan with design decisions and phase roadmap |
 
 ## Code Conventions
 
@@ -45,10 +50,13 @@ This document provides context for AI agents working on this project.
 - **Constants**: `UPPER_CASE` (e.g., `EPD_W`, `WIFI_SSID`, `PRV_KEY`)
 - **HTTP pattern**: `WiFiClient`/`WiFiClientSecure` + `HTTPClient`, always call `http.end()`
 - **JSON parsing**: `Arduino_JSON` library, check `JSON.typeof()` before accessing
-- **Token storage**: NVS via `Preferences` library, namespaces: `"withings"`, `"strava"`
+- **Token storage**: NVS via `Preferences` library (wrapped by ConfigManager)
+- **NVS namespaces**: `wifi`, `openweather`, `withings`, `strava`, `firmware`
+- **NVS key limit**: 15 chars max (e.g., `client_sec` not `client_secret`)
 
-## Display Layout Coordinates
+## Display Screens
 
+### Main Screen
 ```
 EPD_W = 400, EPD_H = 300
 
@@ -66,19 +74,50 @@ Bottom values: 24px
 Bottom labels: Y = bottomY + 28, 12px
 ```
 
-## Rocker Switch
+### OTA Progress Screen (`display_ota_screen`)
+- Title "Updating Firmware" at Y=60, 24px
+- Version transition (e.g., "v0.2.2 -> v0.2.3") at Y=100, 16px
+- Progress bar: 280x30px centered at Y=150, outline + filled
+- Percentage at Y=200, 24px
+- "Do not power off!" warning at Y=250, 12px
+- Updated at 25% intervals via `otaSetProgressCallback`
 
-- GPIO 6 (`PRV_KEY`): previous button
-- GPIO 4 (`NEXT_KEY`): next button
-- Both configured with `INPUT_PULLUP` + ISR on `FALLING` edge
-- 200ms debounce
-- Currently toggles `bottomRightMode` between 0 (Strava) and 1 (Weight, default)
+### AP Mode Screen (`display_ap_screen`)
+- "WiFi Setup" title at Y=40, 24px
+- Step 1: "Connect to WiFi:" + SSID ("EinkPanel") at Y=90/115
+- Step 2: "Open browser:" + IP at Y=160/185
+- Step 3: "Select your WiFi network" at Y=230
+- Triggered by WiFiManager AP callback
+
+## Buttons
+
+| GPIO | Button | Function |
+|------|--------|----------|
+| 6 | PRV_KEY (rocker left) | Toggle bottomRightMode |
+| 4 | NEXT_KEY (rocker right) | Toggle bottomRightMode |
+| 1 | MENU | Status screen (planned, not implemented) |
+| 2 | HOME | Unused |
+| 5 | OK | Unused |
+
+All buttons: `INPUT_PULLUP`, ISR on `FALLING`, 200ms debounce.
+
+## OTA Update System
+
+- GitHub releases API (public repo, no auth needed)
+- Check: boot + manual from dashboard `/check-update`
+- `/check-update` uses deferred pattern: first call sets flag, main loop runs check, second call returns cached result (async handler can't do blocking HTTPS)
+- `/apply-update` sets `otaTriggered` flag, main loop applies
+- Progress callback updates e-ink at 25% intervals
+- Rollback: `esp_ota_mark_app_valid_cancel_rollback()` after WiFi + NTP succeed
+- `FIRMWARE_VERSION` must have `v` prefix to match GitHub tags
+- Version set via platformio.ini build flag: `-DFIRMWARE_VERSION='"v0.2.3"'`
+- CI `sed` injects version from git tag into platformio.ini
 
 ## Token Management Pattern
 
 Both Withings and Strava use OAuth2 with **single-use refresh tokens**:
 
-1. On boot: load tokens from NVS, fall back to `credentials.h`
+1. On boot: load tokens from NVS via ConfigManager
 2. On API call: if 401, refresh token and retry (max 1 retry)
 3. On successful refresh: save BOTH access_token AND refresh_token to NVS
 4. Withings token endpoint: `POST https://wbsapi.withings.net/v2/oauth2` with `action=requesttoken`
@@ -86,31 +125,7 @@ Both Withings and Strava use OAuth2 with **single-use refresh tokens**:
    - Response wraps tokens in `body` object, check `status` field for errors
 5. Strava token endpoint: `POST https://www.strava.com/oauth/token`
 6. All HTTPS clients use `client.setInsecure()` and `http.setTimeout(10000)`
-
-## Withings API Specifics
-
-- Endpoint: `POST https://wbsapi.withings.net/measure` with `action=getmeas`
-- Auth: `Bearer` token in header
-- Body: form-urlencoded with `startdate` and `enddate` (Unix timestamps)
-- NO `userid` parameter
-- Response: `body.measuregrps[0].measures[0].value` (divide by 1000 for kg)
-- Measurement date: `body.measuregrps[0].date` (Unix timestamp)
-- Shows "STALE" if last measurement > 7 days old
-- Weight trend: compares latest vs oldest measurement in 6-month window
-
-## Rain Detection
-
-- Current rain: check `weather[0].id` from current weather (200-599 = precipitation)
-- Forecast rain: `GET /data/2.5/forecast?cnt=8` (8 slots × 3h = 24h ahead)
-- When rain detected, replaces pollen display with "Raining" or "Rain in Xh"
-
-## Strava API
-
-- Endpoint: `GET https://www.strava.com/api/v3/athlete/activities?per_page=1&page=1`
-- Auth: `Bearer` token in header
-- Access tokens expire every 6 hours
-- Shows: activity type + distance (e.g. "Run 5.2km") with date (e.g. "12 May")
-- Activity types mapped to short names (MountainBikeRide→MTB, TrailRun→Trail, etc.)
+7. All credentials managed via web dashboard at `http://eink-panel.local`
 
 ## Common Pitfalls
 
@@ -121,6 +136,9 @@ Both Withings and Strava use OAuth2 with **single-use refresh tokens**:
 5. `EPD_ShowPicture` bitmap format: MSB first, inverted color logic
 6. Numbers-only fonts (`_tn`) can't render degree symbol — use separate small "o"
 7. ESP32 `time_t` from NTP — check `now < 1000000000` before using timestamps
+8. ESPAsyncWebServer handlers must not do blocking HTTPS — defer to main loop via flags
+9. NVS keys max 15 chars — use abbreviations (e.g., `client_sec`)
+10. `FIRMWARE_VERSION` must include `v` prefix to match GitHub tag names
 
 ## Debugging
 
@@ -128,20 +146,4 @@ Both Withings and Strava use OAuth2 with **single-use refresh tokens**:
 - Reset device via DTR toggle for serial capture: `s.setDTR(False); sleep(0.1); s.setDTR(True)`
 - Or use Python: `serial.Serial('/dev/cu.usbserial-110', 115200, timeout=2)`
 - All API responses are printed to Serial for debugging
-
-## Credentials Template
-
-```cpp
-#define WIFI_SSID "..."
-#define WIFI_PASSWORD "..."
-#define OPENWEATHER_API_KEY "..."
-#define WITHINGS_CLIENT_ID "..."
-#define WITHINGS_CLIENT_SECRET "..."
-#define WITHINGS_ACCESS_TOKEN "..."
-#define WITHINGS_REFRESH_TOKEN "..."
-#define WITHINGS_USER_ID "..."
-#define STRAVA_CLIENT_ID "..."
-#define STRAVA_CLIENT_SECRET "..."
-#define STRAVA_ACCESS_TOKEN "..."
-#define STRAVA_REFRESH_TOKEN "..."
-```
+- Web dashboard `/status` endpoint returns health JSON
