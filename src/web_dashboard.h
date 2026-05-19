@@ -4,9 +4,13 @@
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
 #include "config_manager.h"
+#include "ota_update.h"
 
 AsyncWebServer server(80);
 extern ConfigManager config;
+
+// Flag for async OTA trigger from dashboard
+volatile bool otaTriggered = false;
 
 // Firmware version baked in at build time
 #ifndef FIRMWARE_VERSION
@@ -61,10 +65,12 @@ input{width:100%;padding:8px;margin-top:2px;border:1px solid #ccc;border-radius:
 <div style="margin-top:16px">
 <button class="btn btn-save" onclick="save()">Save Settings</button>
 <button class="btn btn-status" onclick="status()">Status</button>
+<button class="btn btn-save" onclick="checkUpdate()">Check for Updates</button>
 <button class="btn btn-reset" onclick="reset()">Reset WiFi</button>
 </div>
 
 <div id="statusBox" class="status"></div>
+<div id="updateBox" class="status"></div>
 
 <script>
 function msg(txt,ok){
@@ -101,6 +107,25 @@ function status(){
 function reset(){
   if(!confirm('Reset WiFi credentials? Device will restart in AP mode.'))return;
   fetch('/reset',{method:'POST'}).then(function(){msg('Resetting...',true)}).catch(function(){msg('Error',false)});
+}
+function checkUpdate(){
+  var box=document.getElementById('updateBox');
+  box.style.display='block';box.textContent='Checking for updates...';
+  fetch('/check-update').then(function(r){return r.json()}).then(function(j){
+    if(j.available){
+      box.innerHTML='<b>Update available:</b> '+j.version+'<br><button class="btn btn-save" onclick="applyUpdate()">Update Now</button>';
+    } else {
+      box.textContent='Already up to date ('+j.current+')';
+    }
+  }).catch(function(){box.textContent='Error checking for updates'});
+}
+function applyUpdate(){
+  var box=document.getElementById('updateBox');
+  box.textContent='Downloading and applying update... Do not unplug the device.';
+  fetch('/apply-update',{method:'POST'}).then(function(r){return r.json()}).then(function(j){
+    if(j.status==='started'){box.textContent='Update started. Device will reboot when complete.';}
+    else{box.textContent='Error: '+j.message;}
+  }).catch(function(){box.textContent='Error triggering update'});
 }
 // Load current values on page load
 fetch('/status').then(function(r){return r.json()}).then(function(j){
@@ -214,6 +239,25 @@ void setupWebDashboard() {
     WiFiManager wm;
     wm.resetSettings();
     ESP.restart();
+  });
+
+  // Check for OTA update
+  server.on("/check-update", HTTP_GET, [](AsyncWebServerRequest *request) {
+    OTAUpdateInfo info = otaCheckForUpdate();
+    String json = "{";
+    json += "\"available\":" + String(info.available ? "true" : "false") + ",";
+    json += "\"current\":\"" + String(FIRMWARE_VERSION) + "\"";
+    if (info.available) {
+      json += ",\"version\":\"" + info.version + "\"";
+    }
+    json += "}";
+    request->send(200, "application/json", json);
+  });
+
+  // Trigger OTA update (runs in main loop via flag)
+  server.on("/apply-update", HTTP_POST, [](AsyncWebServerRequest *request) {
+    otaTriggered = true;
+    request->send(200, "application/json", "{\"status\":\"started\",\"message\":\"Update started\"}");
   });
 
   server.begin();

@@ -2,6 +2,7 @@
 #include <WiFiManager.h>
 #include <HTTPClient.h>
 #include <Arduino_JSON.h>
+#include <esp_ota_ops.h>
 #include "EPD.h"
 #include "EPD_GUI.h"
 #include "pic.h"
@@ -9,6 +10,7 @@
 #include "config_manager.h"
 
 #include "main_screen.h"
+#include "ota_update.h"
 #include "web_dashboard.h"
 
 ConfigManager config;
@@ -113,6 +115,18 @@ void setup() {
   Serial.print("Time set: ");
   Serial.println(ctime(&now));
 
+  // Mark OTA app as valid after WiFi + NTP succeed (rollback safety)
+  esp_ota_mark_app_valid_cancel_rollback();
+  Serial.println("App marked as valid (rollback cancelled)");
+
+  // Check for OTA update on boot
+  Serial.println("Checking for OTA update...");
+  if (otaCheckAndApply()) {
+    Serial.println("OTA update applied, rebooting...");
+    delay(1000);
+    ESP.restart();
+  }
+
   fetch_weather_data(httpResponseCode);
   fetch_weight_data(httpResponseCode);
   fetch_strava_data(httpResponseCode);
@@ -124,6 +138,17 @@ void loop() {
   static unsigned long lastWeatherFetch = 0;
   static unsigned long lastWeightFetch = 0;
   static unsigned long lastStravaFetch = 0;
+
+  // Dashboard-triggered OTA update
+  if (otaTriggered) {
+    otaTriggered = false;
+    Serial.println("OTA triggered from dashboard");
+    if (otaCheckAndApply()) {
+      Serial.println("OTA update applied, rebooting...");
+      delay(1000);
+      ESP.restart();
+    }
+  }
 
   // Rocker switch: toggle bottom-right between Strava (0) and Weight (1)
   if (prvButtonPressed || nextButtonPressed) {
