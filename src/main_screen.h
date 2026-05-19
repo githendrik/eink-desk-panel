@@ -579,6 +579,109 @@ void fetch_weather_data(int& httpResponseCode) {
 
 
 
+// ---- Status Screen ----
+// otaStateText: 0=idle, 1=checking, 2=update available, 3=no update
+void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersion) {
+  char buffer[64];
+
+  EPD_Init_Fast(Fast_Seconds_1_5s);
+  Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
+  EPD_Full(WHITE);
+  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+
+  int midX = EPD_W / 2;
+  int y = 20;
+
+  // Title
+  const char* title = "Device Status";
+  int titleW = EPD_GetUTF8TextWidth(title, 24);
+  EPD_ShowStringUTF8(midX - titleW / 2, y, title, 24, BLACK);
+  y += 40;
+
+  // Horizontal line
+  EPD_DrawLine(20, y, EPD_W - 20, y, BLACK);
+  y += 15;
+
+  // WiFi SSID
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "WiFi: %s", WiFi.SSID().c_str());
+  EPD_ShowStringUTF8(20, y, buffer, 16, BLACK);
+  y += 25;
+
+  // IP
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "IP: %s", WiFi.localIP().toString().c_str());
+  EPD_ShowStringUTF8(20, y, buffer, 16, BLACK);
+  y += 25;
+
+  // Signal strength
+  int rssi = WiFi.RSSI();
+  const char* sigText;
+  if (rssi > -50) sigText = "Excellent";
+  else if (rssi > -60) sigText = "Good";
+  else if (rssi > -70) sigText = "Fair";
+  else sigText = "Weak";
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "Signal: %s (%ddBm)", sigText, rssi);
+  EPD_ShowStringUTF8(20, y, buffer, 16, BLACK);
+  y += 25;
+
+  // Firmware version
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "Firmware: %s", FIRMWARE_VERSION);
+  EPD_ShowStringUTF8(20, y, buffer, 16, BLACK);
+  y += 25;
+
+  // Uptime
+  unsigned long uptimeSec = millis() / 1000;
+  int days = uptimeSec / 86400;
+  int hours = (uptimeSec % 86400) / 3600;
+  int mins = (uptimeSec % 3600) / 60;
+  memset(buffer, 0, sizeof(buffer));
+  if (days > 0) {
+    snprintf(buffer, sizeof(buffer), "Uptime: %dd %dh %dm", days, hours, mins);
+  } else {
+    snprintf(buffer, sizeof(buffer), "Uptime: %dh %dm", hours, mins);
+  }
+  EPD_ShowStringUTF8(20, y, buffer, 16, BLACK);
+  y += 35;
+
+  // Horizontal line
+  EPD_DrawLine(20, y, EPD_W - 20, y, BLACK);
+  y += 15;
+
+  // OTA section
+  if (otaState == 0) {
+    const char* hint = "Press OK to check for updates";
+    int hintW = EPD_GetUTF8TextWidth(hint, 16);
+    EPD_ShowStringUTF8(midX - hintW / 2, y, hint, 16, BLACK);
+  } else if (otaState == 1) {
+    const char* msg = "Checking for updates...";
+    int msgW = EPD_GetUTF8TextWidth(msg, 16);
+    EPD_ShowStringUTF8(midX - msgW / 2, y, msg, 16, BLACK);
+  } else if (otaState == 2 && otaVersion != nullptr) {
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "Update available: %s", otaVersion);
+    int msgW = EPD_GetUTF8TextWidth(buffer, 16);
+    EPD_ShowStringUTF8(midX - msgW / 2, y, buffer, 16, BLACK);
+    y += 22;
+    const char* hint2 = "Press OK to install";
+    int h2W = EPD_GetUTF8TextWidth(hint2, 16);
+    EPD_ShowStringUTF8(midX - h2W / 2, y, hint2, 16, BLACK);
+  } else if (otaState == 3) {
+    const char* msg = "Firmware is up to date";
+    int msgW = EPD_GetUTF8TextWidth(msg, 16);
+    EPD_ShowStringUTF8(midX - msgW / 2, y, msg, 16, BLACK);
+  }
+
+  // Footer
+  const char* footer = "MENU to go back";
+  int footW = EPD_GetUTF8TextWidth(footer, 12);
+  EPD_ShowStringUTF8(midX - footW / 2, EPD_H - 20, footer, 12, BLACK);
+
+  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+}
+
 // ---- OTA Update Progress Screen ----
 void display_ota_screen(uint8_t* ImageBW, const char* version, int percent) {
   char buffer[64];

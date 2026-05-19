@@ -89,22 +89,28 @@ Bottom labels: Y = bottomY + 28, 12px
 - Step 3: "Select your WiFi network" at Y=230
 - Triggered by WiFiManager AP callback
 
+### Status Screen (`display_status_screen()`)
+- Shows: WiFi SSID, IP, signal strength (dBm + text), firmware version, uptime
+- OTA section: "Press OK to check" → "Checking..." → "Update available: vX.Y.Z / Press OK to install" or "Firmware is up to date"
+- MENU button or rocker to go back to main screen
+- OK button triggers OTA check; if update found, second OK press applies it
+
 ## Buttons
 
 | GPIO | Button | Function |
 |------|--------|----------|
 | 6 | PRV_KEY (rocker left) | Toggle bottomRightMode |
 | 4 | NEXT_KEY (rocker right) | Toggle bottomRightMode |
-| 1 | MENU | Status screen (planned, not implemented) |
+| 1 | MENU | Toggle status screen |
 | 2 | HOME | Unused |
-| 5 | OK | Unused |
+| 5 | OK | On status screen: check for OTA / apply update |
 
 All buttons: `INPUT_PULLUP`, ISR on `FALLING`, 200ms debounce.
 
 ## OTA Update System
 
 - GitHub releases API (public repo, no auth needed)
-- Check: boot + manual from dashboard `/check-update`
+- Check: boot + manual from dashboard `/check-update` + MENU button status screen (OK to check/apply)
 - `/check-update` uses deferred pattern: first call sets flag, main loop runs check, second call returns cached result (async handler can't do blocking HTTPS)
 - `/apply-update` sets `otaTriggered` flag, main loop applies
 - Progress callback updates e-ink at 25% intervals
