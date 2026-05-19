@@ -48,10 +48,6 @@ input{width:100%;padding:8px;margin-top:2px;border:1px solid #ccc;border-radius:
 <h1>E-Ink Desk Panel</h1>
 <div id="msg" class="msg"></div>
 
-<h2>OpenWeather</h2>
-<label>API Key<input type="text" id="ow_key" placeholder="API key"></label>
-<label>City ID<input type="text" id="ow_city" placeholder="2661552" value="2661552"></label>
-
 <h2>Withings</h2>
 <label>Client ID<input type="text" id="w_cid"></label>
 <label>Client Secret<input type="password" id="w_csec"></label>
@@ -83,8 +79,6 @@ function msg(txt,ok){
 }
 function save(){
   var d={
-    ow_key:document.getElementById('ow_key').value,
-    ow_city:document.getElementById('ow_city').value,
     w_cid:document.getElementById('w_cid').value,
     w_csec:document.getElementById('w_csec').value,
     w_at:document.getElementById('w_at').value,
@@ -142,8 +136,6 @@ function applyUpdate(){
 }
 // Load current values on page load
 fetch('/status').then(function(r){return r.json()}).then(function(j){
-  if(j.ow_key)document.getElementById('ow_key').value=j.ow_key;
-  if(j.ow_city)document.getElementById('ow_city').value=j.ow_city;
   if(j.w_cid)document.getElementById('w_cid').value=j.w_cid;
   if(j.w_uid)document.getElementById('w_uid').value=j.w_uid;
   if(j.s_cid)document.getElementById('s_cid').value=j.s_cid;
@@ -170,16 +162,6 @@ void setupWebDashboard() {
     if (JSON.typeof(obj) == "undefined") {
       request->send(400, "application/json", "{\"status\":\"error\",\"message\":\"Invalid JSON\"}");
       return;
-    }
-
-    // OpenWeather
-    if (JSON.typeof(obj["ow_key"]) != "undefined") {
-      String val = (const char*)obj["ow_key"];
-      if (val.length() > 0) config.openWeatherApiKey = val;
-    }
-    if (JSON.typeof(obj["ow_city"]) != "undefined") {
-      String val = (const char*)obj["ow_city"];
-      if (val.length() > 0) config.cityId = val;
     }
 
     // Withings
@@ -236,8 +218,6 @@ void setupWebDashboard() {
     json += "\"uptime\":" + String(millis() / 1000) + ",";
     json += "\"free_heap\":" + String(ESP.getFreeHeap()) + ",";
     // Non-secret config values for form pre-fill
-    json += "\"ow_key\":\"" + config.openWeatherApiKey + "\",";
-    json += "\"ow_city\":\"" + config.cityId + "\",";
     json += "\"w_cid\":\"" + config.withingsClientId + "\",";
     json += "\"w_uid\":\"" + config.withingsUserId + "\",";
     json += "\"s_cid\":\"" + config.stravaClientId + "\"";

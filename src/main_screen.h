@@ -16,6 +16,7 @@ String aareTemp;
 String aareText;
 String pollenLevel;
 String rainStatus;  // empty = no rain, otherwise "Rain in 3h/2h/1h", "Rain imminent", or "Raining"
+int uvIndexMax = 0; // Daily max UV index from Open-Meteo
 String weight = "--.-";
 String weightTrend = "n/a";
 
@@ -410,7 +411,15 @@ void fetch_weather_data(int& httpResponseCode) {
   }
 
   bool currentlyRaining = false;
-  String serverPath = "http://api.openweathermap.org/data/2.5/weather?id=" + config.cityId + "&APPID=" + config.openWeatherApiKey + "&units=metric";
+
+  // Open-Meteo: weather + hourly forecast + daily UV in one call
+  // Herrenschwanden coordinates: 46.9725, 7.4528
+  String serverPath = "http://api.open-meteo.com/v1/forecast?latitude=46.9725&longitude=7.4528"
+    "&current=temperature_2m,weather_code"
+    "&hourly=weather_code"
+    "&daily=uv_index_max"
+    "&forecast_hours=8"
+    "&timezone=Europe/Zurich";
   WiFiClient client;
   HTTPClient http;
   http.begin(client, serverPath);
@@ -427,11 +436,15 @@ void fetch_weather_data(int& httpResponseCode) {
       return;
     }
 
-    temperature = String((int)round((double)myObject["main"]["temp"]));
+    // Current temperature
+    temperature = String((int)round((double)myObject["current"]["temperature_2m"]));
 
-    // Check if currently raining (weather IDs 2xx=thunderstorm, 3xx=drizzle, 5xx=rain)
-    int weatherId = (int)round((double)myObject["weather"][0]["id"]);
-    currentlyRaining = (weatherId >= 200 && weatherId < 600);
+    // Current rain detection via WMO weather codes
+    // 51-67: drizzle/rain, 71-77: snow, 80-82: rain showers, 85-86: snow showers, 95-99: thunderstorm
+    int weatherCode = (int)(double)myObject["current"]["weather_code"];
+    currentlyRaining = (weatherCode >= 51 && weatherCode <= 67) ||
+                       (weatherCode >= 80 && weatherCode <= 82) ||
+                       (weatherCode >= 95 && weatherCode <= 99);
     if (currentlyRaining) {
       rainStatus = "Raining";
       Serial.println("Currently raining");
@@ -439,56 +452,45 @@ void fetch_weather_data(int& httpResponseCode) {
       rainStatus = "";
     }
 
-    Serial.print("String Temperature: ");
-    Serial.println(temperature);
-  } else {
-    Serial.print("Weather API error: ");
-    Serial.println(httpResponseCode);
-    http.end();
-    return;
-  }
+    // Daily UV index max
+    if (JSON.typeof(myObject["daily"]["uv_index_max"]) != "undefined") {
+      uvIndexMax = (int)round((double)myObject["daily"]["uv_index_max"][0]);
+      Serial.print("UV Index Max: ");
+      Serial.println(uvIndexMax);
+    }
 
-  http.end();
-
-  // Check forecast for rain ending (if currently raining) or upcoming rain
-  String forecastPath = "http://api.openweathermap.org/data/2.5/forecast?id=" + config.cityId + "&APPID=" + config.openWeatherApiKey + "&units=metric&cnt=8";
-  HTTPClient httpForecast;
-  httpForecast.begin(client, forecastPath);
-  httpResponseCode = httpForecast.GET();
-
-  if (httpResponseCode == 200) {
-    String forecastBuffer = httpForecast.getString();
-    JSONVar forecastObject = JSON.parse(forecastBuffer);
-
-    if (JSON.typeof(forecastObject) != "undefined" && JSON.typeof(forecastObject["list"]) != "undefined") {
-      int listCount = forecastObject["list"].length();
+    // Hourly forecast for rain prediction
+    if (JSON.typeof(myObject["hourly"]["weather_code"]) != "undefined") {
+      int hourlyCount = myObject["hourly"]["weather_code"].length();
       time_t now = time(NULL);
 
-      for (int i = 0; i < listCount; i++) {
-        int fId = (int)round((double)forecastObject["list"][i]["weather"][0]["id"]);
-        bool isRain = fId >= 200 && fId < 600;
+      // Parse the first hourly timestamp to calculate offsets
+      String firstTimeStr = (const char*)myObject["hourly"]["time"][0];
+
+      for (int i = 0; i < hourlyCount && i < 8; i++) {
+        int fCode = (int)(double)myObject["hourly"]["weather_code"][i];
+        bool isRain = (fCode >= 51 && fCode <= 67) ||
+                      (fCode >= 80 && fCode <= 82) ||
+                      (fCode >= 95 && fCode <= 99);
+        int hoursAway = i; // Each slot is ~1 hour from the current hour
 
         if (currentlyRaining) {
+          // Look for when rain ends
           if (!isRain) {
-            time_t forecastDt = (time_t)(double)forecastObject["list"][i]["dt"];
-            int hoursAway = (forecastDt - now) / 3600;
-            if (hoursAway <= 3) {
-              if (hoursAway >= 2) {
-                rainStatus = "Rain ends in 3h";
-              } else if (hoursAway >= 1) {
-                rainStatus = "Rain ends in 2h";
-              } else {
-                rainStatus = "Rain end soon";
-              }
-              Serial.print("Rain ending: ");
-              Serial.println(rainStatus);
+            if (hoursAway >= 3) {
+              rainStatus = "Rain ends in 3h";
+            } else if (hoursAway >= 2) {
+              rainStatus = "Rain ends in 2h";
+            } else if (hoursAway >= 1) {
+              rainStatus = "Rain end soon";
             }
+            Serial.print("Rain ending: ");
+            Serial.println(rainStatus);
             break;
           }
         } else {
+          // Look for upcoming rain
           if (isRain) {
-            time_t forecastDt = (time_t)(double)forecastObject["list"][i]["dt"];
-            int hoursAway = (forecastDt - now) / 3600;
             if (hoursAway >= 4) break;
             if (hoursAway >= 3) {
               rainStatus = "Rain in 3h";
@@ -506,10 +508,20 @@ void fetch_weather_data(int& httpResponseCode) {
         }
       }
     }
-  }
-  httpForecast.end();
 
-  String pollenServerPath = "http://api.openweathermap.org/data/2.5/air_pollution?lat=46.9480&lon=7.4474&appid=" + config.openWeatherApiKey;
+    Serial.print("Temperature: ");
+    Serial.println(temperature);
+  } else {
+    Serial.print("Weather API error: ");
+    Serial.println(httpResponseCode);
+    http.end();
+    return;
+  }
+
+  http.end();
+
+  // Open-Meteo Air Quality API for PM2.5 (pollen proxy)
+  String pollenServerPath = "http://air-quality-api.open-meteo.com/v1/air-quality?latitude=46.9725&longitude=7.4528&current=pm2_5";
   HTTPClient httpPollen;
   httpPollen.begin(client, pollenServerPath);
   httpResponseCode = httpPollen.GET();
@@ -523,7 +535,7 @@ void fetch_weather_data(int& httpResponseCode) {
       return;
     }
 
-    double pm25Value = (double)pollenObject["list"][0]["components"]["pm2_5"];
+    double pm25Value = (double)pollenObject["current"]["pm2_5"];
     int pm25 = (int)pm25Value;
     
     if (pm25 < 20) pollenLevel = "low";
@@ -813,7 +825,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   EPD_ShowStringUTF8(degX, 30, "o", 16, BLACK);
   
   memset(buffer, 0, sizeof(buffer));
-  snprintf(buffer, sizeof(buffer), "Bern");
+  snprintf(buffer, sizeof(buffer), "Local");
   int labelWidth = EPD_GetUTF8TextWidth(buffer, 16);
   EPD_ShowStringUTF8(leftCenter - labelWidth / 2, 115, buffer, 16, BLACK);
 
@@ -847,7 +859,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     EPD_ShowStringUTF8(midX - aareTextWidth / 2, 170, aareTextBuf, 16, BLACK);
   }
 
-  // Bottom-left: Rain status (if raining/forecast) or Pollen
+  // Bottom-left: Rain status > UV warning (>=6) > Pollen (priority order)
   int bottomY = topHeight + 10;
   if (rainStatus.length() > 0) {
     memset(buffer, 0, sizeof(buffer));
@@ -859,6 +871,22 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     snprintf(buffer, sizeof(buffer), "Weather");
     int rainLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
     EPD_ShowStringUTF8(leftCenter - rainLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
+  } else if (uvIndexMax >= 6) {
+    // UV warning: 6-7 high, 8-10 very high, 11+ extreme
+    const char* uvLabel;
+    if (uvIndexMax >= 11) uvLabel = "extreme";
+    else if (uvIndexMax >= 8) uvLabel = "very high";
+    else uvLabel = "high";
+
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "%s", uvLabel);
+    int uvWidth = EPD_GetUTF8TextWidth(buffer, 24);
+    EPD_ShowStringUTF8(leftCenter - uvWidth / 2, bottomY, buffer, 24, BLACK);
+    
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "UV Index");
+    int uvLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
+    EPD_ShowStringUTF8(leftCenter - uvLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
   } else {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", pollenLevel.c_str());

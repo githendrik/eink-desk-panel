@@ -9,10 +9,6 @@ public:
   String wifiSsid;
   String wifiPassword;
 
-  // OpenWeather
-  String openWeatherApiKey;
-  String cityId;
-
   // Withings
   String withingsClientId;
   String withingsClientSecret;
@@ -29,7 +25,7 @@ public:
   // Firmware
   String firmwareVersion;
 
-  ConfigManager() : cityId("2661552"), firmwareVersion("0.0.0") {}
+  ConfigManager() : firmwareVersion("0.0.0") {}
 
   // Load all config from NVS
   void loadAll() {
@@ -38,11 +34,6 @@ public:
     prefs.begin("wifi", true);
     wifiSsid = prefs.getString("ssid", "");
     wifiPassword = prefs.getString("password", "");
-    prefs.end();
-
-    prefs.begin("openweather", true);
-    openWeatherApiKey = prefs.getString("api_key", "");
-    cityId = prefs.getString("city_id", "2661552");
     prefs.end();
 
     prefs.begin("withings", true);
@@ -70,7 +61,6 @@ public:
   // Save all config to NVS
   void saveAll() {
     saveWifi();
-    saveOpenWeather();
     saveWithings();
     saveStrava();
     saveFirmwareVersion();
@@ -81,14 +71,6 @@ public:
     prefs.begin("wifi", false);
     prefs.putString("ssid", wifiSsid);
     prefs.putString("password", wifiPassword);
-    prefs.end();
-  }
-
-  void saveOpenWeather() {
-    Preferences prefs;
-    prefs.begin("openweather", false);
-    prefs.putString("api_key", openWeatherApiKey);
-    prefs.putString("city_id", cityId);
     prefs.end();
   }
 
@@ -123,7 +105,7 @@ public:
   // Clear all NVS data (for factory reset)
   void clearAll() {
     Preferences prefs;
-    const char* namespaces[] = {"wifi", "openweather", "withings", "strava", "firmware"};
+    const char* namespaces[] = {"wifi", "withings", "strava", "firmware"};
     for (auto ns : namespaces) {
       prefs.begin(ns, false);
       prefs.clear();

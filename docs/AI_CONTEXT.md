@@ -14,6 +14,7 @@ This document provides context for AI agents working on this project.
 - `V2_CHANGES.md` — Update if significant features are added or removed
 - `WITHINGS_SETUP.md` — Update if token management or setup steps change
 - `GETTING_STARTED.md` — Update if setup steps change
+- `RELEASE_PROCEDURE.md` — Reference for creating new firmware releases
 
 ## Critical Facts
 
