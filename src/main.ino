@@ -58,6 +58,9 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(NEXT_KEY), handleNextButton, FALLING);
 
   EPD_GPIOInit();
+  EPD_Init();
+  EPD_Clear();
+  delay(100);
 
   // WiFiManager: tries saved credentials, falls back to AP "EinkPanel"
   WiFiManager wm;
@@ -86,7 +89,8 @@ void setup() {
   configTime(0, 3600, "pool.ntp.org", "time.nist.gov");
   Serial.println("Waiting for NTP time...");
   time_t now = time(NULL);
-  while (now < 1000000000) {
+  unsigned long ntpStart = millis();
+  while (now < 1000000000 && millis() - ntpStart < 15000) {
     delay(100);
     now = time(NULL);
   }
