@@ -579,6 +579,101 @@ void fetch_weather_data(int& httpResponseCode) {
 
 
 
+// ---- OTA Update Progress Screen ----
+void display_ota_screen(uint8_t* ImageBW, const char* version, int percent) {
+  char buffer[64];
+
+  EPD_Init_Fast(Fast_Seconds_1_5s);
+  Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
+  EPD_Full(WHITE);
+  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+
+  int midX = EPD_W / 2;
+
+  // Title
+  const char* title = "Updating Firmware";
+  int titleW = EPD_GetUTF8TextWidth(title, 24);
+  EPD_ShowStringUTF8(midX - titleW / 2, 60, title, 24, BLACK);
+
+  // Version line
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "%s -> %s", FIRMWARE_VERSION, version);
+  int verW = EPD_GetUTF8TextWidth(buffer, 16);
+  EPD_ShowStringUTF8(midX - verW / 2, 100, buffer, 16, BLACK);
+
+  // Progress bar outline (280x30, centered)
+  int barX = midX - 140;
+  int barY = 150;
+  int barW = 280;
+  int barH = 30;
+  EPD_DrawRectangle(barX, barY, barX + barW, barY + barH, BLACK, 0);  // outline
+
+  // Fill progress
+  if (percent > 0) {
+    int fillW = (barW - 4) * percent / 100;
+    EPD_DrawRectangle(barX + 2, barY + 2, barX + 2 + fillW, barY + barH - 2, BLACK, 1);  // filled
+  }
+
+  // Percentage text
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "%d%%", percent);
+  int pctW = EPD_GetUTF8TextWidth(buffer, 24);
+  EPD_ShowStringUTF8(midX - pctW / 2, 200, buffer, 24, BLACK);
+
+  // Warning
+  const char* warn = "Do not power off!";
+  int warnW = EPD_GetUTF8TextWidth(warn, 12);
+  EPD_ShowStringUTF8(midX - warnW / 2, 250, warn, 12, BLACK);
+
+  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+}
+
+// ---- AP / Captive Portal Screen ----
+void display_ap_screen(uint8_t* ImageBW, const char* ssid, const char* ip) {
+  char buffer[64];
+
+  EPD_Init();
+  EPD_Clear();
+  EPD_Init_Fast(Fast_Seconds_1_5s);
+  Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
+  EPD_Full(WHITE);
+  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+
+  int midX = EPD_W / 2;
+
+  // Title
+  const char* title = "WiFi Setup";
+  int titleW = EPD_GetUTF8TextWidth(title, 24);
+  EPD_ShowStringUTF8(midX - titleW / 2, 40, title, 24, BLACK);
+
+  // Step 1
+  const char* step1 = "1. Connect to WiFi:";
+  int s1W = EPD_GetUTF8TextWidth(step1, 16);
+  EPD_ShowStringUTF8(midX - s1W / 2, 90, step1, 16, BLACK);
+
+  // SSID (large)
+  int ssidW = EPD_GetUTF8TextWidth(ssid, 24);
+  EPD_ShowStringUTF8(midX - ssidW / 2, 115, ssid, 24, BLACK);
+
+  // Step 2
+  const char* step2 = "2. Open browser:";
+  int s2W = EPD_GetUTF8TextWidth(step2, 16);
+  EPD_ShowStringUTF8(midX - s2W / 2, 160, step2, 16, BLACK);
+
+  // IP (large)
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "http://%s", ip);
+  int ipW = EPD_GetUTF8TextWidth(buffer, 24);
+  EPD_ShowStringUTF8(midX - ipW / 2, 185, buffer, 24, BLACK);
+
+  // Step 3
+  const char* step3 = "3. Select your WiFi network";
+  int s3W = EPD_GetUTF8TextWidth(step3, 16);
+  EPD_ShowStringUTF8(midX - s3W / 2, 230, step3, 16, BLACK);
+
+  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+}
+
 void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   static char buffer[64];
 

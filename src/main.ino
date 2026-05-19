@@ -68,7 +68,7 @@ void setup() {
     Serial.println("Entered AP mode: EinkPanel");
     Serial.print("Portal IP: ");
     Serial.println(WiFi.softAPIP());
-    // TODO (Phase C2): Draw AP mode screen on e-ink
+    display_ap_screen(ImageBW, "EinkPanel", WiFi.softAPIP().toString().c_str());
   });
 
   if (!wm.autoConnect("EinkPanel")) {
@@ -99,10 +99,17 @@ void setup() {
 
   // Check for OTA update on boot
   Serial.println("Checking for OTA update...");
-  if (otaCheckAndApply()) {
-    Serial.println("OTA update applied, rebooting...");
-    delay(1000);
-    ESP.restart();
+  otaSetProgressCallback([](int percent) {
+    display_ota_screen(ImageBW, lastUpdateInfo.version.c_str(), percent);
+  });
+  lastUpdateInfo = otaCheckForUpdate();
+  if (lastUpdateInfo.available) {
+    display_ota_screen(ImageBW, lastUpdateInfo.version.c_str(), 0);
+    if (otaApplyUpdate(lastUpdateInfo)) {
+      Serial.println("OTA update applied, rebooting...");
+      delay(1000);
+      ESP.restart();
+    }
   }
 
   fetch_weather_data(httpResponseCode);
@@ -129,10 +136,14 @@ void loop() {
   if (otaTriggered) {
     otaTriggered = false;
     Serial.println("OTA triggered from dashboard");
-    if (otaCheckAndApply()) {
-      Serial.println("OTA update applied, rebooting...");
-      delay(1000);
-      ESP.restart();
+    lastUpdateInfo = otaCheckForUpdate();
+    if (lastUpdateInfo.available) {
+      display_ota_screen(ImageBW, lastUpdateInfo.version.c_str(), 0);
+      if (otaApplyUpdate(lastUpdateInfo)) {
+        Serial.println("OTA update applied, rebooting...");
+        delay(1000);
+        ESP.restart();
+      }
     }
   }
 
