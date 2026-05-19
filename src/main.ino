@@ -1,4 +1,5 @@
 #include <WiFi.h>
+#include <WiFiManager.h>
 #include <HTTPClient.h>
 #include "EPD.h"
 #include "EPD_GUI.h"
@@ -52,13 +53,23 @@ void setup() {
 
   EPD_GPIOInit();
 
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.println("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+  // WiFiManager: tries saved credentials, falls back to AP "EinkPanel"
+  WiFiManager wm;
+  wm.setConfigPortalTimeout(180);  // 3 min portal timeout, then retry
+  
+  // Show AP mode info on e-ink display before starting portal
+  wm.setAPCallback([](WiFiManager *mgr) {
+    Serial.println("Entered AP mode: EinkPanel");
+    Serial.print("Portal IP: ");
+    Serial.println(WiFi.softAPIP());
+    // TODO (Phase C2): Draw AP mode screen on e-ink
+  });
+
+  if (!wm.autoConnect("EinkPanel")) {
+    Serial.println("WiFi connection failed, restarting...");
+    ESP.restart();
   }
-  Serial.println("");
+
   Serial.print("Connected. IP: ");
   Serial.println(WiFi.localIP());
 
