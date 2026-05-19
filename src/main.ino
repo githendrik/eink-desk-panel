@@ -6,7 +6,6 @@
 #include "EPD.h"
 #include "EPD_GUI.h"
 #include "pic.h"
-#include "credentials.h"
 #include "config_manager.h"
 
 #include "main_screen.h"
@@ -81,27 +80,6 @@ void setup() {
   Serial.println(WiFi.localIP());
 
   config.loadAll();
-
-  // Seed NVS from credentials.h for any empty fields
-  // This can be removed once all tokens are managed via the web dashboard
-  bool owChanged = false;
-  if (config.openWeatherApiKey.length() == 0) { config.openWeatherApiKey = OPENWEATHER_API_KEY; owChanged = true; }
-  if (owChanged) { config.saveOpenWeather(); Serial.println("Seeded OpenWeather from credentials.h"); }
-
-  bool wChanged = false;
-  if (config.withingsClientId.length() == 0) { config.withingsClientId = WITHINGS_CLIENT_ID; wChanged = true; }
-  if (config.withingsClientSecret.length() == 0) { config.withingsClientSecret = WITHINGS_CLIENT_SECRET; wChanged = true; }
-  if (config.withingsAccessToken.length() == 0) { config.withingsAccessToken = WITHINGS_ACCESS_TOKEN; wChanged = true; }
-  if (config.withingsRefreshToken.length() == 0) { config.withingsRefreshToken = WITHINGS_REFRESH_TOKEN; wChanged = true; }
-  if (config.withingsUserId.length() == 0) { config.withingsUserId = WITHINGS_USER_ID; wChanged = true; }
-  if (wChanged) { config.saveWithings(); Serial.println("Seeded Withings from credentials.h"); }
-
-  bool sChanged = false;
-  if (config.stravaClientId.length() == 0) { config.stravaClientId = STRAVA_CLIENT_ID; sChanged = true; }
-  if (config.stravaClientSecret.length() == 0) { config.stravaClientSecret = STRAVA_CLIENT_SECRET; sChanged = true; }
-  if (config.stravaAccessToken.length() == 0) { config.stravaAccessToken = STRAVA_ACCESS_TOKEN; sChanged = true; }
-  if (config.stravaRefreshToken.length() == 0) { config.stravaRefreshToken = STRAVA_REFRESH_TOKEN; sChanged = true; }
-  if (sChanged) { config.saveStrava(); Serial.println("Seeded Strava from credentials.h"); }
 
   setupWebDashboard();
 
