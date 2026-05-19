@@ -5,12 +5,11 @@
 #include <HTTPClient.h>
 #include <Arduino_JSON.h>
 #include <time.h>
-#include <Preferences.h>
 #include "EPD.h"
 #include "EPD_GUI.h"
-#include "credentials.h"
+#include "config_manager.h"
 
-Preferences prefs;
+extern ConfigManager config;
 
 String temperature;
 String aareTemp;
@@ -25,44 +24,6 @@ String stravaActivityDate = "";  // e.g. "2h ago" or "3d ago"
 
 // Bottom-right display mode: 0 = strava (default for now), 1 = weight
 int bottomRightMode = 1;
-
-String openWeatherMapApiKey = OPENWEATHER_API_KEY;
-String cityId = "2661552";
-
-String withingsClientId = WITHINGS_CLIENT_ID;
-String withingsClientSecret = WITHINGS_CLIENT_SECRET;
-String withingsAccessToken = WITHINGS_ACCESS_TOKEN;
-String withingsRefreshToken = WITHINGS_REFRESH_TOKEN;
-String withingsUserId = WITHINGS_USER_ID;
-
-String stravaClientId = STRAVA_CLIENT_ID;
-String stravaClientSecret = STRAVA_CLIENT_SECRET;
-String stravaAccessToken = STRAVA_ACCESS_TOKEN;
-String stravaRefreshToken = STRAVA_REFRESH_TOKEN;
-
-void loadWithingsTokens() {
-  prefs.begin("withings", true);  // read-only
-  String storedAccess = prefs.getString("access_token", "");
-  String storedRefresh = prefs.getString("refresh_token", "");
-  prefs.end();
-  
-  if (storedAccess.length() > 0) {
-    withingsAccessToken = storedAccess;
-    Serial.println("Loaded access token from NVS");
-  }
-  if (storedRefresh.length() > 0) {
-    withingsRefreshToken = storedRefresh;
-    Serial.println("Loaded refresh token from NVS");
-  }
-}
-
-void saveWithingsTokens() {
-  prefs.begin("withings", false);  // read-write
-  prefs.putString("access_token", withingsAccessToken);
-  prefs.putString("refresh_token", withingsRefreshToken);
-  prefs.end();
-  Serial.println("Saved tokens to NVS");
-}
 
 String jsonBuffer;
 JSONVar myObject;
@@ -105,9 +66,9 @@ void fetch_withings_token(int& httpResponseCode) {
   http.begin(client, "https://wbsapi.withings.net/v2/oauth2");
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
-  String postData = "action=requesttoken&grant_type=refresh_token&refresh_token=" + withingsRefreshToken + 
-                    "&client_id=" + withingsClientId + 
-                    "&client_secret=" + withingsClientSecret;
+  String postData = "action=requesttoken&grant_type=refresh_token&refresh_token=" + config.withingsRefreshToken + 
+                    "&client_id=" + config.withingsClientId + 
+                    "&client_secret=" + config.withingsClientSecret;
   
   httpResponseCode = http.POST(postData);
   
@@ -140,12 +101,12 @@ void fetch_withings_token(int& httpResponseCode) {
       }
       if (token.length() > 0) {
         token.replace("\"", "");
-        withingsAccessToken = token;
+        config.withingsAccessToken = token;
         if (newRefresh.length() > 0) {
           newRefresh.replace("\"", "");
-          withingsRefreshToken = newRefresh;
+          config.withingsRefreshToken = newRefresh;
         }
-        saveWithingsTokens();
+        config.saveWithings();
         Serial.println("Token updated successfully");
       }
     }
@@ -163,7 +124,7 @@ void fetch_weight_data(int& httpResponseCode, bool retry = true) {
     return;
   }
 
-  if (withingsAccessToken.length() == 0) {
+  if (config.withingsAccessToken.length() == 0) {
     Serial.println("No access token, fetching...");
     fetch_withings_token(httpResponseCode);
     if (httpResponseCode != 200) return;
@@ -185,7 +146,7 @@ void fetch_weight_data(int& httpResponseCode, bool retry = true) {
   HTTPClient http;
   http.setTimeout(10000);
   http.begin(client, serverPath);
-  http.addHeader("Authorization", "Bearer " + withingsAccessToken);
+  http.addHeader("Authorization", "Bearer " + config.withingsAccessToken);
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
   String postData = "action=getmeas&startdate=" + String(sixMonthsAgo) + 
@@ -301,30 +262,6 @@ void fetch_weight_data(int& httpResponseCode, bool retry = true) {
 
 // --- Strava ---
 
-void loadStravaTokens() {
-  prefs.begin("strava", true);
-  String storedAccess = prefs.getString("access_token", "");
-  String storedRefresh = prefs.getString("refresh_token", "");
-  prefs.end();
-  
-  if (storedAccess.length() > 0) {
-    stravaAccessToken = storedAccess;
-    Serial.println("Loaded Strava access token from NVS");
-  }
-  if (storedRefresh.length() > 0) {
-    stravaRefreshToken = storedRefresh;
-    Serial.println("Loaded Strava refresh token from NVS");
-  }
-}
-
-void saveStravaTokens() {
-  prefs.begin("strava", false);
-  prefs.putString("access_token", stravaAccessToken);
-  prefs.putString("refresh_token", stravaRefreshToken);
-  prefs.end();
-  Serial.println("Saved Strava tokens to NVS");
-}
-
 void fetch_strava_token(int& httpResponseCode) {
   if (WiFi.status() != WL_CONNECTED) return;
   
@@ -336,10 +273,10 @@ void fetch_strava_token(int& httpResponseCode) {
   http.begin(client, "https://www.strava.com/oauth/token");
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
-  String postData = "client_id=" + stravaClientId + 
-                    "&client_secret=" + stravaClientSecret +
+  String postData = "client_id=" + config.stravaClientId + 
+                    "&client_secret=" + config.stravaClientSecret +
                     "&grant_type=refresh_token" +
-                    "&refresh_token=" + stravaRefreshToken;
+                    "&refresh_token=" + config.stravaRefreshToken;
   
   httpResponseCode = http.POST(postData);
   
@@ -353,14 +290,14 @@ void fetch_strava_token(int& httpResponseCode) {
       if (JSON.typeof(tokenObject["access_token"]) != "undefined") {
         String token = JSON.stringify(tokenObject["access_token"]);
         token.replace("\"", "");
-        stravaAccessToken = token;
+        config.stravaAccessToken = token;
       }
       if (JSON.typeof(tokenObject["refresh_token"]) != "undefined") {
         String refresh = JSON.stringify(tokenObject["refresh_token"]);
         refresh.replace("\"", "");
-        stravaRefreshToken = refresh;
+        config.stravaRefreshToken = refresh;
       }
-      saveStravaTokens();
+      config.saveStrava();
       Serial.println("Strava token updated successfully");
     }
   } else {
@@ -396,7 +333,7 @@ void fetch_strava_data(int& httpResponseCode, bool retry = true) {
   http.setTimeout(10000);
   
   http.begin(client, "https://www.strava.com/api/v3/athlete/activities?per_page=1&page=1");
-  http.addHeader("Authorization", "Bearer " + stravaAccessToken);
+  http.addHeader("Authorization", "Bearer " + config.stravaAccessToken);
   
   httpResponseCode = http.GET();
   Serial.print("Strava HTTP code: ");
@@ -473,7 +410,7 @@ void fetch_weather_data(int& httpResponseCode) {
   }
 
   bool currentlyRaining = false;
-  String serverPath = "http://api.openweathermap.org/data/2.5/weather?id=" + cityId + "&APPID=" + openWeatherMapApiKey + "&units=metric";
+  String serverPath = "http://api.openweathermap.org/data/2.5/weather?id=" + config.cityId + "&APPID=" + config.openWeatherApiKey + "&units=metric";
   WiFiClient client;
   HTTPClient http;
   http.begin(client, serverPath);
@@ -514,7 +451,7 @@ void fetch_weather_data(int& httpResponseCode) {
   http.end();
 
   // Check forecast for rain ending (if currently raining) or upcoming rain
-  String forecastPath = "http://api.openweathermap.org/data/2.5/forecast?id=" + cityId + "&APPID=" + openWeatherMapApiKey + "&units=metric&cnt=8";
+  String forecastPath = "http://api.openweathermap.org/data/2.5/forecast?id=" + config.cityId + "&APPID=" + config.openWeatherApiKey + "&units=metric&cnt=8";
   HTTPClient httpForecast;
   httpForecast.begin(client, forecastPath);
   httpResponseCode = httpForecast.GET();
@@ -572,7 +509,7 @@ void fetch_weather_data(int& httpResponseCode) {
   }
   httpForecast.end();
 
-  String pollenServerPath = "http://api.openweathermap.org/data/2.5/air_pollution?lat=46.9480&lon=7.4474&appid=" + openWeatherMapApiKey;
+  String pollenServerPath = "http://api.openweathermap.org/data/2.5/air_pollution?lat=46.9480&lon=7.4474&appid=" + config.openWeatherApiKey;
   HTTPClient httpPollen;
   httpPollen.begin(client, pollenServerPath);
   httpResponseCode = httpPollen.GET();
