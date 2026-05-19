@@ -9,8 +9,11 @@
 AsyncWebServer server(80);
 extern ConfigManager config;
 
-// Flag for async OTA trigger from dashboard
+// Flags for async OTA trigger from dashboard
 volatile bool otaTriggered = false;
+volatile bool otaCheckTriggered = false;
+OTAUpdateInfo lastUpdateInfo = {false, "", ""};
+bool updateCheckDone = false;
 
 // Firmware version baked in at build time
 #ifndef FIRMWARE_VERSION
@@ -112,7 +115,17 @@ function checkUpdate(){
   var box=document.getElementById('updateBox');
   box.style.display='block';box.textContent='Checking for updates...';
   fetch('/check-update').then(function(r){return r.json()}).then(function(j){
-    if(j.available){
+    if(j.checking){
+      setTimeout(function(){
+        fetch('/check-update').then(function(r){return r.json()}).then(function(j2){
+          if(j2.available){
+            box.innerHTML='<b>Update available:</b> '+j2.version+'<br><button class="btn btn-save" onclick="applyUpdate()">Update Now</button>';
+          } else {
+            box.textContent='Already up to date ('+j2.current+')';
+          }
+        }).catch(function(){box.textContent='Error fetching result'});
+      },5000);
+    } else if(j.available){
       box.innerHTML='<b>Update available:</b> '+j.version+'<br><button class="btn btn-save" onclick="applyUpdate()">Update Now</button>';
     } else {
       box.textContent='Already up to date ('+j.current+')';
@@ -241,17 +254,23 @@ void setupWebDashboard() {
     ESP.restart();
   });
 
-  // Check for OTA update
+  // Check for OTA update (deferred to main loop)
   server.on("/check-update", HTTP_GET, [](AsyncWebServerRequest *request) {
-    OTAUpdateInfo info = otaCheckForUpdate();
-    String json = "{";
-    json += "\"available\":" + String(info.available ? "true" : "false") + ",";
-    json += "\"current\":\"" + String(FIRMWARE_VERSION) + "\"";
-    if (info.available) {
-      json += ",\"version\":\"" + info.version + "\"";
+    if (updateCheckDone) {
+      // Return cached result
+      String json = "{";
+      json += "\"available\":" + String(lastUpdateInfo.available ? "true" : "false") + ",";
+      json += "\"current\":\"" + String(FIRMWARE_VERSION) + "\"";
+      if (lastUpdateInfo.available) {
+        json += ",\"version\":\"" + lastUpdateInfo.version + "\"";
+      }
+      json += "}";
+      updateCheckDone = false;
+      request->send(200, "application/json", json);
+    } else {
+      otaCheckTriggered = true;
+      request->send(200, "application/json", "{\"checking\":true,\"current\":\"" + String(FIRMWARE_VERSION) + "\"}");
     }
-    json += "}";
-    request->send(200, "application/json", json);
   });
 
   // Trigger OTA update (runs in main loop via flag)

@@ -117,6 +117,14 @@ void loop() {
   static unsigned long lastWeightFetch = 0;
   static unsigned long lastStravaFetch = 0;
 
+  // Dashboard-triggered OTA check
+  if (otaCheckTriggered) {
+    otaCheckTriggered = false;
+    Serial.println("OTA check triggered from dashboard");
+    lastUpdateInfo = otaCheckForUpdate();
+    updateCheckDone = true;
+  }
+
   // Dashboard-triggered OTA update
   if (otaTriggered) {
     otaTriggered = false;
