@@ -1,4 +1,4 @@
-# AI Agent Context - E-Ink Desk Panel v2
+# AI Agent Context - E-Ink Desk Panel
 
 ## Purpose
 
@@ -8,13 +8,13 @@ This document provides context for AI agents working on this project.
 
 **After completing any task, always update the relevant docs in `docs/` to reflect changes.** This ensures context is preserved across sessions and models. Key files to check:
 
-- `AI_CONTEXT.md` — Update if new pins, coordinates, patterns, or pitfalls are discovered
-- `PROJECT_OVERVIEW.md` — Update if architecture, layout, APIs, or refresh intervals change
-- `API_REFERENCE.md` — Update if API endpoints, auth, or response fields change
-- `V2_CHANGES.md` — Update if significant features are added or removed
-- `WITHINGS_SETUP.md` — Update if token management or setup steps change
-- `GETTING_STARTED.md` — Update if setup steps change
-- `RELEASE_PROCEDURE.md` — Reference for creating new firmware releases
+- `ai-context.md` — Update if new pins, coordinates, patterns, or pitfalls are discovered
+- `project-overview.md` — Update if architecture, layout, APIs, or refresh intervals change
+- `api-reference.md` — Update if API endpoints, auth, or response fields change
+- `v2-changes.md` — Update if significant features are added or removed
+- `oauth-setup.md` — Update if token management or setup steps change
+- `getting-started.md` — Update if setup steps change
+- `release-procedure.md` — Reference for creating new firmware releases
 
 ## Critical Facts
 
@@ -23,7 +23,7 @@ This document provides context for AI agents working on this project.
 - **Serial port**: `/dev/cu.usbserial-110` (can change to `-210` on replug)
 - **Upload command**: `~/.platformio/penv/bin/pio run -t upload` (plain `pio` not in PATH)
 - **Serial monitor**: `pio device monitor` broken; use Python `serial.Serial` instead
-- **User location**: Bern, Switzerland
+- **User location**: Herrenschwanden, Switzerland (46.9725, 7.4528)
 - **WiFi SSID**: `Hello@richert.li`
 
 ## File Map
@@ -42,7 +42,6 @@ This document provides context for AI agents working on this project.
 | `lib/EPD/EPD.h` | Display driver (EPD_Init, EPD_Display_Part, etc.) |
 | `platformio.ini` | Board config, library deps, custom partitions, build flags |
 | `.github/workflows/build.yml` | CI: build on v* tag push, create release with .bin |
-| `docs/OTA_AND_CONFIG_PLAN.md` | Full implementation plan with design decisions and phase roadmap |
 
 ## Code Conventions
 
@@ -52,7 +51,7 @@ This document provides context for AI agents working on this project.
 - **HTTP pattern**: `WiFiClient`/`WiFiClientSecure` + `HTTPClient`, always call `http.end()`
 - **JSON parsing**: `Arduino_JSON` library, check `JSON.typeof()` before accessing
 - **Token storage**: NVS via `Preferences` library (wrapped by ConfigManager)
-- **NVS namespaces**: `wifi`, `openweather`, `withings`, `strava`, `firmware`
+- **NVS namespaces**: `wifi`, `withings`, `strava`, `firmware`
 - **NVS key limit**: 15 chars max (e.g., `client_sec` not `client_secret`)
 
 ## Display Screens
@@ -67,7 +66,7 @@ midX = 200
 
 Temperature Y: 30 (78px font, Logisoso numbers-only)
 Degree symbol: next to temp, 16px "o"
-Location labels ("Bern"/"Aare"): Y=115, 16px
+Location labels ("Local"/"Aare"): Y=115, 16px
 AareGuru text: Y=170, 16px, centered at midX
 topHeight = EPD_H - 70 = 230
 bottomY = topHeight + 10 = 240
@@ -77,7 +76,7 @@ Bottom labels: Y = bottomY + 28, 12px
 
 ### OTA Progress Screen (`display_ota_screen`)
 - Title "Updating Firmware" at Y=60, 24px
-- Version transition (e.g., "v0.2.2 -> v0.2.3") at Y=100, 16px
+- Version transition (e.g., "v0.2.6 -> v0.2.7") at Y=100, 16px
 - Progress bar: 280x30px centered at Y=150, outline + filled
 - Percentage at Y=200, 24px
 - "Do not power off!" warning at Y=250, 12px
@@ -117,7 +116,7 @@ All buttons: `INPUT_PULLUP`, ISR on `FALLING`, 200ms debounce.
 - Progress callback updates e-ink at 25% intervals
 - Rollback: `esp_ota_mark_app_valid_cancel_rollback()` after WiFi + NTP succeed
 - `FIRMWARE_VERSION` must have `v` prefix to match GitHub tags
-- Version set via platformio.ini build flag: `-DFIRMWARE_VERSION='"v0.2.3"'`
+- Version set via platformio.ini build flag: `-DFIRMWARE_VERSION='"v0.2.7"'`
 - CI `sed` injects version from git tag into platformio.ini
 
 ## Token Management Pattern

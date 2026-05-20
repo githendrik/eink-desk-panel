@@ -162,4 +162,4 @@ Goal: Automate building and publishing firmware.
 | NEXT | 4 | Rocker next (toggle Weight/Strava on main screen) |
 | MENU | 1 | Toggle status screen |
 | HOME | 2 | Unused (available) |
-| OK | 5 | Unused (available) |
+| OK | 5 | On status screen: check for OTA / apply update |

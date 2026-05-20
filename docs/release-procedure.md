@@ -29,10 +29,10 @@ vMAJOR.MINOR.PATCH
 Edit `platformio.ini` and update the build flag:
 
 ```ini
--D FIRMWARE_VERSION='"v0.2.6"'
+-D FIRMWARE_VERSION='"v0.2.8"'
 ```
 
-Replace `0.2.6` with your next version number.
+Replace with your next version number.
 
 ## Step 3: Commit the Version Bump
 
@@ -57,19 +57,24 @@ This triggers the GitHub Actions CI workflow.
 
 ## Step 6: Verify CI Build
 
-1. Go to https://github.com/githendrik/eink-desk-panel/actions
-2. Find the workflow run for tag `vX.Y.Z`
-3. Wait for it to complete (~2-3 minutes)
-4. Verify the `.bin` file is attached to the release
+```bash
+# Wait ~2-3 minutes, then check
+gh run list --repo githendrik/eink-desk-panel --workflow build --branch vX.Y.Z --limit 1
+
+# Watch in real-time
+gh run watch <RUN_ID> --repo githendrik/eink-desk-panel
+```
 
 ## Step 7: Verify Release
 
-1. Go to https://github.com/githendrik/eink-desk-panel/releases
-2. Find release `vX.Y.Z`
-3. Verify it contains:
-   - Tag name matches version
-   - Firmware binary: `firmware.bin`
-   - Auto-generated commit history
+```bash
+gh release view vX.Y.Z --repo githendrik/eink-desk-panel
+```
+
+Verify it contains:
+- Tag name matches version
+- Firmware binary: `firmware.bin`
+- Auto-generated commit history
 
 ## Step 8: Test OTA Update (Optional but Recommended)
 
@@ -103,7 +108,7 @@ The GitHub Actions workflow (`.github/workflows/build.yml`) automatically:
 If a release has issues:
 
 1. **Do NOT delete the tag** (breaks OTA for devices that already updated)
-2. Create a new patch release with the fix (e.g., `v0.2.7`)
+2. Create a new patch release with the fix
 3. Follow the same procedure above
 4. Devices will auto-update to the new version on next boot check
 
@@ -113,6 +118,7 @@ If a release has issues:
 
 | Version | Date | Notes |
 |---------|------|-------|
+| v0.2.7 | 2026-05-20 | Migrate to Open-Meteo, add UV index, 10-min refresh |
 | v0.2.6 | 2026-05-19 | Status screen with on-device OTA check |
 | v0.2.5 | 2026-05-19 | Fix post-OTA blank screen |
 | v0.2.4 | 2026-05-19 | OTA progress screen |
@@ -131,10 +137,10 @@ If a release has issues:
 grep FIRMWARE_VERSION platformio.ini
 
 # Bump version (edit platformio.ini first)
-git add -A && git commit -m "Bump to v0.2.6"
+git add -A && git commit -m "Bump to vX.Y.Z"
 
 # Tag and push
-git tag v0.2.6 && git push origin main v0.2.6
+git tag vX.Y.Z && git push origin main vX.Y.Z
 
 # Verify tag exists
 git tag -l

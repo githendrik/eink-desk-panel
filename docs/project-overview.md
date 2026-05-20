@@ -2,13 +2,13 @@
 
 ## Project Description
 
-A single-screen ESP32-S3 e-ink desk panel displaying weather, river temperature, pollen/rain, weight, and Strava activity data. Temperatures are the dominant visual element using large 78px fonts.
+A single-screen ESP32-S3 e-ink desk panel displaying weather, river temperature, pollen/rain/UV, weight, and Strava activity data. Temperatures are the dominant visual element using large 78px fonts.
 
 ## Hardware
 
 - **Board**: Freenove ESP32-S3 WROOM (CrowPanel 4.2" e-ink)
 - **Display**: 400x300 E-Paper (E-Ink) via SPI
-- **Input**: Rocker switch (GPIO 6 = previous, GPIO 4 = next)
+- **Input**: Rocker switch (GPIO 6 = previous, GPIO 4 = next), MENU (GPIO 1), OK (GPIO 5)
 - **Connection**: USB serial (`/dev/cu.usbserial-110`) at 115200 baud
 - **Upload speed**: 460800 baud
 
@@ -18,19 +18,19 @@ A single-screen ESP32-S3 e-ink desk panel displaying weather, river temperature,
 ┌──────────────────────────────────────┐
 │                                      │
 │    23°              11°              │  <- 78px Logisoso font
-│    Bern             Aare             │  <- 16px labels
+│    Local            Aare             │  <- 16px labels
 │                                      │
 │         Geduld, geduld               │  <- AareGuru text (16px, centered)
 │                                      │
 │──────────────────────────────────────│
 │   low            82.3 kg            │  <- 24px values
-│  Pollen           stable            │  <- 12px labels
+│  pollen           stable            │  <- 12px labels
 └──────────────────────────────────────┘
 ```
 
-- Top 2/3: Two large temperatures (Bern air + Aare river) side by side
+- Top 2/3: Two large temperatures (local air + Aare river) side by side
 - Middle: AareGuru commentary text (centered, truncated if too long)
-- Bottom left: Pollen level (or rain status when rain is current/forecast)
+- Bottom left: Priority display — Rain > UV (>=8) > Pollen
 - Bottom right: Weight + trend (or Strava activity, toggled via rocker switch)
 
 ## Architecture
@@ -42,6 +42,9 @@ eink-desk-panel/
 ├── src/
 │   ├── main.ino              # Entry point, WiFi, NTP, fetch/display loop, rocker switch
 │   ├── main_screen.h         # All display + API fetch logic
+│   ├── config_manager.h      # ConfigManager class: per-service NVS load/save/clear
+│   ├── web_dashboard.h       # AsyncWebServer dashboard HTML + endpoints
+│   ├── ota_update.h          # OTA check + download + apply via Update library
 │   ├── credentials.h         # API keys and tokens (gitignored)
 │   └── credentials.h.example # Template for credentials
 ├── lib/
@@ -62,15 +65,17 @@ eink-desk-panel/
 2. **EPD_GUI** (`lib/EPD_GUI/`): GUI functions with U8g2 font integration for large fonts
 3. **EPD_SPI** (`lib/EPD_SPI/`): SPI communication abstraction
 4. **Main Screen** (`src/main_screen.h`): All API fetching, data parsing, and display rendering
+5. **Config Manager** (`src/config_manager.h`): NVS-backed persistent configuration
+6. **Web Dashboard** (`src/web_dashboard.h`): Local web UI for token management and OTA
+7. **OTA Update** (`src/ota_update.h`): GitHub Releases-based firmware updates
 
 ## API Integrations
 
 | API | Data | Refresh | Protocol |
 |-----|------|---------|----------|
-| OpenWeatherMap (weather) | Temperature | 15 min | HTTP GET |
-| OpenWeatherMap (air pollution) | PM2.5 as pollen proxy | 15 min | HTTP GET |
-| OpenWeatherMap (forecast) | Rain forecast 24h | 15 min | HTTP GET |
-| AareGuru | River temp + text | 15 min | HTTP GET |
+| Open-Meteo (weather) | Temperature, rain, UV index | 10 min | HTTPS GET |
+| Open-Meteo (air quality) | PM2.5 as pollen proxy | 10 min | HTTPS GET |
+| AareGuru | River temp + text | 10 min | HTTP GET |
 | Withings | Weight + 6-month trend | 6 hours | HTTPS POST |
 | Strava | Last activity | 1 hour | HTTPS GET |
 
@@ -81,10 +86,11 @@ Both Withings and Strava use OAuth2 with single-use refresh tokens:
 - On startup, tokens are loaded from NVS (falling back to `credentials.h` values)
 - On successful refresh, both new access_token and refresh_token are saved to NVS
 - Token refresh includes retry logic (max 1 retry) to prevent infinite loops
+- Credentials can be managed via web dashboard at `http://eink-panel.local`
 
 ## Refresh Intervals
 
-- Weather + Pollen + Rain + Aare: every 15 minutes
+- Weather + Pollen + UV + Aare: every 10 minutes
 - Strava: every 1 hour
 - Weight: every 6 hours
 
@@ -92,7 +98,7 @@ Both Withings and Strava use OAuth2 with single-use refresh tokens:
 
 - **Framework**: PlatformIO with Arduino framework
 - **Board config**: `freenove_esp32_s3_wroom`
-- **Libraries**: Adafruit GFX, U8g2, U8g2_for_Adafruit_GFX, Arduino_JSON, Preferences
+- **Libraries**: Adafruit GFX, U8g2, U8g2_for_Adafruit_GFX, Arduino_JSON, Preferences, ESPAsyncWebServer
 - **Upload**: `~/.platformio/penv/bin/pio run -t upload`
 - **Serial port**: `/dev/cu.usbserial-110` (may change on replug)
 

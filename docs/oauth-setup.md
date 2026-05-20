@@ -1,6 +1,6 @@
-# Withings API Setup
+# OAuth Setup (Withings & Strava)
 
-## Get Your Credentials
+## Withings API
 
 ### Step 1: Create Developer Account
 
@@ -28,10 +28,13 @@ Follow the prompts:
 2. Browser will open — authorize the app
 3. Script will display your credentials
 
-### Step 3: Update credentials.h
+### Step 3: Configure the Device
 
-Copy the output to `src/credentials.h`:
+Option A — via web dashboard (recommended):
+1. Connect to `http://eink-panel.local`
+2. Enter Withings credentials in the dashboard form
 
+Option B — via `credentials.h` (first flash only):
 ```cpp
 #define WITHINGS_CLIENT_ID "your_client_id"
 #define WITHINGS_CLIENT_SECRET "your_client_secret"
@@ -40,13 +43,7 @@ Copy the output to `src/credentials.h`:
 #define WITHINGS_USER_ID "your_user_id"
 ```
 
-### Step 4: Upload to ESP32
-
-```bash
-~/.platformio/penv/bin/pio run -t upload
-```
-
-## Token Lifecycle
+### Token Lifecycle
 
 - **Access token**: Expires after ~3 months
 - **Refresh token**: Long-lived but **single-use** — each refresh returns a new one
@@ -54,7 +51,7 @@ Copy the output to `src/credentials.h`:
 - On boot, tokens load from NVS first, falling back to `credentials.h`
 - You should only need to re-run the OAuth script if NVS gets wiped or the refresh token chain breaks
 
-## Important API Details
+### Important API Details
 
 - Token endpoint: `POST https://wbsapi.withings.net/v2/oauth2` with `action=requesttoken`
   - Do NOT use `oauth2.withings.com` (DNS doesn't resolve on ESP32)
@@ -63,28 +60,28 @@ Copy the output to `src/credentials.h`:
   - Do NOT use `/v2/measure` endpoint
 - Weight value is returned as integer (e.g., 82300 = 82.3 kg)
 
-## Troubleshooting
+### Troubleshooting
 
-### "invalid refresh_token" (status 503)
+**"invalid refresh_token" (status 503)**
 The refresh token has been invalidated (used once and not saved, or chain broken).
 Re-run `python3 scripts/get_withings_credentials.py` to get fresh tokens.
 
-### "invalid_token" (status 401)
+**"invalid_token" (status 401)**
 Access token expired. The device will automatically try to refresh it.
 If refresh also fails, see above.
 
-### Weight shows "--.- kg / err"
+**Weight shows "--.- kg / err"**
 Check serial output for the specific error. Common causes:
 - Token expired and refresh failed
 - Network/DNS issues on ESP32
 - No weight measurements in the last 6 months
 
-### Weight shows "STALE"
+**Weight shows "STALE"**
 No weight measurement in the last 7 days. Step on the scale.
 
-# Strava API Setup
+---
 
-## Get Your Credentials
+## Strava API
 
 ### Step 1: Create Strava App
 
@@ -101,8 +98,13 @@ pip3 install requests
 python3 get_strava_credentials.py
 ```
 
-### Step 3: Update credentials.h
+### Step 3: Configure the Device
 
+Option A — via web dashboard (recommended):
+1. Connect to `http://eink-panel.local`
+2. Enter Strava credentials in the dashboard form
+
+Option B — via `credentials.h`:
 ```cpp
 #define STRAVA_CLIENT_ID "your_client_id"
 #define STRAVA_CLIENT_SECRET "your_client_secret"
@@ -110,13 +112,13 @@ python3 get_strava_credentials.py
 #define STRAVA_REFRESH_TOKEN "your_refresh_token"
 ```
 
-## Token Lifecycle
+### Token Lifecycle
 
 - **Access token**: Expires every **6 hours**
 - **Refresh token**: Long-lived but **single-use**
 - Same NVS persistence pattern as Withings
 
-## Display
+### Display
 
 Shows last activity in bottom-right (toggle with rocker switch):
 - Format: `Run 5.2km` with date below (e.g. `12 May`)

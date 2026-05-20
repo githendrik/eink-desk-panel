@@ -1,25 +1,48 @@
 # API Reference
 
-## OpenWeatherMap API
+## Open-Meteo Weather API
 
-### Current Weather
+### Weather + Forecast + UV (single call)
 ```
-GET http://api.openweathermap.org/data/2.5/weather?id={CITY_ID}&APPID={API_KEY}&units=metric
+GET https://api.open-meteo.com/v1/forecast
+  ?latitude=46.9725&longitude=7.4528
+  &current=temperature_2m,weather_code
+  &hourly=weather_code,precipitation_probability
+  &daily=uv_index_max
+  &forecast_hours=8
+  &timezone=Europe/Zurich
+  &models=meteoswiss_icon_ch1
 ```
 
-**City ID**: Bern = `2661552`
+**Location**: Herrenschwanden, Switzerland (46.9725, 7.4528)
+**Model**: MeteoSwiss ICON-CH1 (1 km resolution)
 
 **Response fields used**:
-- `main.temp`: Current temperature (Celsius)
-- `weather[0].id`: Weather condition code (200-599 = precipitation)
+- `current.temperature_2m`: Current temperature (Celsius)
+- `current.weather_code`: WMO weather code for current conditions
+- `hourly.weather_code[]`: Hourly forecast codes (next 8 hours)
+- `daily.uv_index_max[0]`: Today's maximum UV index
 
-### Air Pollution (Pollen Proxy)
+**WMO rain codes**: 51-67 (drizzle/rain/freezing rain), 80-82 (showers), 95-99 (thunderstorm)
+
+**Rain logic**:
+- Current weather_code in rain range → "raining"
+- Any hourly forecast code in rain range → "rain approaching" / "rain ending"
+- No rain codes → fall through to UV/pollen
+
+**UV display** (bottom-left, only when daily max >= 8):
+- 8-10: "very high"
+- 11+: "extreme"
+
+### Air Quality (pollen proxy)
 ```
-GET http://api.openweathermap.org/data/2.5/air_pollution?lat=46.9480&lon=7.4474&appid={API_KEY}
+GET https://air-quality-api.open-meteo.com/v1/air-quality
+  ?latitude=46.9725&longitude=7.4528
+  &current=pm2_5
 ```
 
 **Response fields used**:
-- `list[0].components.pm2_5`: PM2.5 concentration
+- `current.pm2_5`: PM2.5 concentration (µg/m³)
 
 **PM2.5 → pollen mapping**:
 - < 20: low
@@ -27,16 +50,10 @@ GET http://api.openweathermap.org/data/2.5/air_pollution?lat=46.9480&lon=7.4474&
 - 40-60: high
 - > 60: very high
 
-### Forecast (Rain Detection)
-```
-GET http://api.openweathermap.org/data/2.5/forecast?id={CITY_ID}&APPID={API_KEY}&units=metric&cnt=8
-```
-
-Fetches 8 × 3-hour slots (24h ahead). Checks `list[i].weather[0].id` for rain codes (200-599).
-
 ### Free Tier Limits
-- 60 calls/minute, 1M calls/month
-- Sign up: https://openweathermap.org/api
+- 10,000 calls/day, 600 calls/minute
+- No API key required
+- Docs: https://open-meteo.com/en/docs
 
 ---
 
