@@ -1,130 +1,80 @@
-# E-Ink Desk Panel v2
+# E-Ink Desk Panel
 
-Single-screen weather display for E-Ink panel using ESP32-S3 WROOM.
+A single-screen ESP32-S3 e-ink dashboard displaying weather, river temperature, pollen/UV alerts, body weight, and Strava activity data. Designed for always-on desk use with automatic OTA firmware updates.
+
+![Hardware](https://www.elecrow.com/media/catalog/product/cache/acf3559c3a735f485f0c55e28e1e8f3e/e/s/esp32_4.2_e-paper_1.jpg)
 
 ## Features
 
-- **Weather Screen**: Current weather and forecast from OpenWeatherMap
-- **Aare Temperature**: River temperature data for Bern (from aareguru)
-- **Auto-refresh**: Updates every hour
-- **Low Power**: Deep sleep between updates
-
-## Quick Start
-
-### Prerequisites
-
-1. PlatformIO (VS Code extension or CLI)
-2. Python 3.x (optional, for utility scripts)
-3. Freenove ESP32-S3 WROOM board
-
-### Setup
-
-1. **Clone the repository**
-   ```bash
-   cd eink-desk-panel
-   ```
-
-2. **Create credentials file**
-   
-   Copy `src/credentials.h.example` to `src/credentials.h`:
-   ```bash
-   cp src/credentials.h.example src/credentials.h
-   ```
-
-3. **Edit credentials**
-   
-   Fill in your details in `src/credentials.h`:
-   ```cpp
-   const char* WIFI_SSID = "your_wifi_name";
-   const char* WIFI_PASSWORD = "your_wifi_password";
-   const char* OPENWEATHER_API_KEY = "your_weather_api_key";
-   const char* WEATHER_CITY = "Bern";
-   ```
-
-4. **Configure PlatformIO**
-   
-   Edit `platformio.ini`:
-   - `upload_port`: Your ESP32's serial port (e.g., `/dev/cu.usbserial-10`)
-   - `monitor_port`: Same as upload_port
-
-5. **Build and Upload**
-   ```bash
-   pio run -t upload
-   pio device monitor
-   ```
-
-## Project Structure
-
-```
-eink-desk-panel/
-├── src/
-│   ├── main.ino              # Entry point
-│   ├── credentials.h.example # Credentials template
-│   └── weather_screen.h      # Weather display logic
-├── include/                  # Assets (icons, logos)
-├── lib/                      # EPD driver libraries
-├── scripts/                  # Utility scripts
-└── docs/                     # Documentation
-```
-
-## Documentation
-
-- [Project Overview](docs/PROJECT_OVERVIEW.md)
-- [AI Context](docs/AI_CONTEXT.md) - Guide for AI-assisted development
-- [API Reference](docs/API_REFERENCE.md)
-- [Getting Started](docs/GETTING_STARTED.md)
+- **Local weather** — temperature, rain detection, and UV index via [Open-Meteo](https://open-meteo.com/) (1 km resolution, no API key)
+- **Aare river temperature** — current water temp + commentary from [AareGuru](https://aareguru.ch/)
+- **Pollen / UV alerts** — bottom-left shows rain status, UV warnings (>=8), or pollen level
+- **Body weight + trend** — from [Withings](https://developer.withings.com/) smart scale, 6-month trend indicator
+- **Last activity** — from [Strava](https://developers.strava.com/), toggled via rocker switch
+- **OTA updates** — automatic firmware updates from GitHub Releases
+- **Web dashboard** — configure tokens and trigger updates at `http://eink-panel.local`
+- **WiFi captive portal** — no hardcoded credentials needed
 
 ## Hardware
 
-- Board: Freenove ESP32-S3 WROOM
-- Display: E-Paper via SPI
-- Power: USB or external 5V
-- GPIO 7: Display power
+Built for the [CrowPanel ESP32 4.2" E-Paper Display](https://www.elecrow.com/crowpanel-esp32-4-2-e-paper-hmi-display-with-400-300-resolution-black-white-color-driven-by-spi-interface.html) by Elecrow.
+
+- **Board**: ESP32-S3 WROOM
+- **Display**: 400x300 E-Paper (SSD1683) via SPI
+- **Input**: 5-button navigation (rocker switch + MENU/HOME/OK)
+- **Reference design**: [Elecrow CrowPanel GitHub](https://github.com/Elecrow-RD/CrowPanel-ESP32-4.2-E-paper-HMI-Display-with-400-300)
 
 ## Display Layout
 
 ```
-┌─────────────────────────┐
-│  [Weather Icon]  23°    │
-│                  18°/26°│
-│                  Clear  │
-├─────────────────────────┤
-│  Aare  15°    swimming  │
-└─────────────────────────┘
+┌──────────────────────────────────────┐
+│                                      │
+│    23°              11°              │  large temperatures
+│    Local            Aare             │
+│                                      │
+│         Geduld, geduld               │  AareGuru commentary
+│                                      │
+│──────────────────────────────────────│
+│   low            82.3 kg            │  alerts / weight
+│  pollen           stable            │
+└──────────────────────────────────────┘
 ```
 
-## API Integrations
+## Quick Start
 
-- **OpenWeatherMap**: Weather data (temperature, conditions)
-- **AareGuru**: Aare river temperature and swimming conditions
-
-## Development
-
-### Code Style
-
-- Functions: `snake_case`
-- Variables: `camelCase` (local), `snake_case` (global)
-- Constants: `UPPER_CASE`
-
-### Modifying Refresh Interval
-
-Edit `src/main.ino`:
-```cpp
-if (millis() - lastWeatherFetch >= 1000*60*60) { // 1 hour
+```bash
+git clone https://github.com/githendrik/eink-desk-panel.git
+cd eink-desk-panel
+cp src/credentials.h.example src/credentials.h
+# Edit credentials.h with your Withings/Strava tokens
+~/.platformio/penv/bin/pio run -t upload
 ```
 
-### Changing Location
+On first boot the device creates a WiFi access point (`EinkPanel`). Connect and configure your network via the captive portal.
 
-Edit `src/weather_screen.h`:
-```cpp
-String city = "Bern";
-String countryCode = "2661552"; // OpenWeatherMap city ID
-```
+See [Getting Started](docs/getting-started.md) for full setup instructions.
+
+## Documentation
+
+| Doc | Contents |
+|-----|----------|
+| [Getting Started](docs/getting-started.md) | Setup, build, and first boot |
+| [Project Overview](docs/project-overview.md) | Architecture, layout, font system |
+| [API Reference](docs/api-reference.md) | All API endpoints and response formats |
+| [OAuth Setup](docs/oauth-setup.md) | Withings and Strava credential flow |
+| [Release Procedure](docs/release-procedure.md) | How to tag and publish firmware |
+| [OTA Architecture](docs/ota-architecture.md) | Design decisions and implementation plan |
+| [v2 Changes](docs/v2-changes.md) | What changed from v1 |
+
+## Tech Stack
+
+- **Framework**: PlatformIO + Arduino
+- **Weather**: [Open-Meteo](https://open-meteo.com/) (MeteoSwiss ICON-CH1 model)
+- **Fonts**: U8g2 via Adafruit GFX bridge (up to 78px Logisoso)
+- **Networking**: WiFiManager, ESPAsyncWebServer, mDNS
+- **Storage**: ESP32 NVS (Preferences library)
+- **CI/CD**: GitHub Actions — tag push builds and publishes firmware
 
 ## License
 
-[Your license here]
-
-## Acknowledgments
-
-Based on the original v1 project, simplified to single-screen weather display.
+MIT
