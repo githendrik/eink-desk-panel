@@ -893,7 +893,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     EPD_ShowStringUTF8(leftCenter - pollenWidth / 2, bottomY, buffer, 24, BLACK);
     
     memset(buffer, 0, sizeof(buffer));
-    snprintf(buffer, sizeof(buffer), "Pollen");
+    snprintf(buffer, sizeof(buffer), "pollen");
     int pollenLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
     EPD_ShowStringUTF8(leftCenter - pollenLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
   }
