@@ -871,12 +871,11 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     snprintf(buffer, sizeof(buffer), "Weather");
     int rainLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
     EPD_ShowStringUTF8(leftCenter - rainLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
-  } else if (uvIndexMax >= 6) {
-    // UV warning: 6-7 high, 8-10 very high, 11+ extreme
+  } else if (uvIndexMax >= 8) {
+    // UV warning: 8-10 very high, 11+ extreme
     const char* uvLabel;
     if (uvIndexMax >= 11) uvLabel = "extreme";
-    else if (uvIndexMax >= 8) uvLabel = "very high";
-    else uvLabel = "high";
+    else uvLabel = "very high";
 
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", uvLabel);
@@ -884,7 +883,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     EPD_ShowStringUTF8(leftCenter - uvWidth / 2, bottomY, buffer, 24, BLACK);
     
     memset(buffer, 0, sizeof(buffer));
-    snprintf(buffer, sizeof(buffer), "UV Index");
+    snprintf(buffer, sizeof(buffer), "uv index");
     int uvLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
     EPD_ShowStringUTF8(leftCenter - uvLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
   } else {
