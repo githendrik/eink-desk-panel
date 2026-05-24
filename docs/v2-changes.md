@@ -59,7 +59,7 @@ v2 is a complete redesign from a multi-screen navigation app to a single-screen 
 1. **Single screen**: All data visible at once, no navigation needed
 2. **NVS for tokens**: OAuth refresh tokens are single-use; must persist new ones across reboots
 3. **U8g2 fonts**: Built-in EPD fonts max at 48px; U8g2 provides arbitrary sizes via Adafruit GFX bridge
-4. **PM2.5 as pollen proxy**: Real pollen API (MeteoSwiss) not available until Q2 2026
+4. **Google Pollen API for real plant data (using GRASS type instead of PM2.5 proxy)
 5. **Rocker switch for toggle**: Single screen but Strava/Weight share the bottom-right slot
 6. **Rain overrides pollen**: More actionable information when precipitation is imminent
 7. **Open-Meteo over OpenWeatherMap**: No API key, 1km Swiss resolution (MeteoSwiss ICON-CH1), free tier sufficient

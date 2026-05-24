@@ -5,6 +5,9 @@
 
 class ConfigManager {
 public:
+  // Google Pollen
+  String googlePollenApiKey;
+
   // WiFi
   String wifiSsid;
   String wifiPassword;
@@ -44,6 +47,10 @@ public:
     withingsUserId = prefs.getString("user_id", "");
     prefs.end();
 
+    prefs.begin("google", true);
+    googlePollenApiKey = prefs.getString("pollen_key", "");
+    prefs.end();
+
     prefs.begin("strava", true);
     stravaClientId = prefs.getString("client_id", "");
     stravaClientSecret = prefs.getString("client_sec", "");
@@ -62,6 +69,7 @@ public:
   void saveAll() {
     saveWifi();
     saveWithings();
+    saveGooglePollen();
     saveStrava();
     saveFirmwareVersion();
   }
@@ -82,6 +90,13 @@ public:
     prefs.putString("access_token", withingsAccessToken);
     prefs.putString("refresh_token", withingsRefreshToken);
     prefs.putString("user_id", withingsUserId);
+    prefs.end();
+  }
+  
+  void saveGooglePollen() {
+    Preferences prefs;
+    prefs.begin("google", false);
+    prefs.putString("pollen_key", googlePollenApiKey);
     prefs.end();
   }
 
@@ -105,7 +120,7 @@ public:
   // Clear all NVS data (for factory reset)
   void clearAll() {
     Preferences prefs;
-    const char* namespaces[] = {"wifi", "withings", "strava", "firmware"};
+    const char* namespaces[] = {"wifi", "withings", "google", "strava", "firmware"};
     for (auto ns : namespaces) {
       prefs.begin(ns, false);
       prefs.clear();

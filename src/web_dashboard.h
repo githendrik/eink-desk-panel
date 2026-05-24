@@ -61,6 +61,9 @@ input{width:100%;padding:8px;margin-top:2px;border:1px solid #ccc;border-radius:
 <label>Access Token<input type="text" id="s_at"></label>
 <label>Refresh Token<input type="text" id="s_rt"></label>
 
+<h2>Google Pollen</h2>
+<label>API Key<input type="password" id="g_pollen"></label>
+
 <div style="margin-top:16px">
 <button class="btn btn-save" onclick="save()">Save Settings</button>
 <button class="btn btn-status" onclick="status()">Status</button>
@@ -88,6 +91,7 @@ function save(){
     s_csec:document.getElementById('s_csec').value,
     s_at:document.getElementById('s_at').value,
     s_rt:document.getElementById('s_rt').value
+    ,g_pollen:document.getElementById('g_pollen').value
   };
   fetch('/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
   .then(function(r){return r.json()})
@@ -139,6 +143,7 @@ fetch('/status').then(function(r){return r.json()}).then(function(j){
   if(j.w_cid)document.getElementById('w_cid').value=j.w_cid;
   if(j.w_uid)document.getElementById('w_uid').value=j.w_uid;
   if(j.s_cid)document.getElementById('s_cid').value=j.s_cid;
+    if(j.g_pollen)document.getElementById('g_pollen').value=j.g_pollen;
 }).catch(function(){});
 </script>
 </body>
@@ -186,6 +191,12 @@ void setupWebDashboard() {
       if (val.length() > 0) config.withingsUserId = val;
     }
 
+    // Google
+     if (JSON.typeof(obj["g_pollen"]) != "undefined") {
+       String val = (const char*)obj["g_pollen"];
+       if (val.length() > 0) config.googlePollenApiKey = val;
+     }
+
     // Strava
     if (JSON.typeof(obj["s_cid"]) != "undefined") {
       String val = (const char*)obj["s_cid"];
@@ -221,6 +232,7 @@ void setupWebDashboard() {
     json += "\"w_cid\":\"" + config.withingsClientId + "\",";
     json += "\"w_uid\":\"" + config.withingsUserId + "\",";
     json += "\"s_cid\":\"" + config.stravaClientId + "\"";
+    json += ",\"g_pollen\":\"" + config.googlePollenApiKey + "\"";
     json += "}";
     request->send(200, "application/json", json);
   });

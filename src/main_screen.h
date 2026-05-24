@@ -520,38 +520,85 @@ void fetch_weather_data(int& httpResponseCode) {
 
   http.end();
 
-  // Open-Meteo Air Quality API for PM2.5 (pollen proxy)
-  String pollenServerPath = "http://air-quality-api.open-meteo.com/v1/air-quality?latitude=46.9725&longitude=7.4528&current=pm2_5";
-  HTTPClient httpPollen;
-  httpPollen.begin(client, pollenServerPath);
-  httpResponseCode = httpPollen.GET();
-
-  if (httpResponseCode == 200) {
-    pollenJsonBuffer = httpPollen.getString();
-    pollenObject = JSON.parse(pollenJsonBuffer);
-
-    if (JSON.typeof(pollenObject) == "undefined") {
-      httpPollen.end();
-      return;
-    }
-
-    double pm25Value = (double)pollenObject["current"]["pm2_5"];
-    int pm25 = (int)pm25Value;
+  // Google Pollen API (specifically GRASS)
+  if (config.googlePollenApiKey.length() > 0) {
+    String pollenServerPath = "https://pollen.googleapis.com/v1/forecast:lookup?key=" + config.googlePollenApiKey + "&location.latitude=46.9725&location.longitude=7.4528&days=1";
     
-    if (pm25 < 20) pollenLevel = "low";
-    else if (pm25 < 40) pollenLevel = "moderate";
-    else if (pm25 < 60) pollenLevel = "high";
-    else pollenLevel = "very high";
+    // Google API requires HTTPS. Using setInsecure to bypass cert checks for simplicity constraint.
+    WiFiClientSecure secureClient;
+    secureClient.setInsecure();
+    
+    HTTPClient httpPollen;
+    httpPollen.begin(secureClient, pollenServerPath);
+    httpResponseCode = httpPollen.GET();
 
-    Serial.print("Pollen level: ");
-    Serial.println(pollenLevel);
+    if (httpResponseCode == 200) {
+      pollenJsonBuffer = httpPollen.getString();
+      pollenObject = JSON.parse(pollenJsonBuffer);
+
+      if (JSON.typeof(pollenObject) != "undefined") {
+        int maxUpi = -1;
+        JSONVar dailyInfo = pollenObject["dailyInfo"][0];
+        if (JSON.typeof(dailyInfo) != "undefined") {
+          JSONVar pollenTypeInfo = dailyInfo["pollenTypeInfo"];
+          if (JSON.typeof(pollenTypeInfo) != "undefined") {
+            for (int i = 0; i < pollenTypeInfo.length(); i++) {
+              String code = (const char*)pollenTypeInfo[i]["code"];
+              if (code == "GRASS") {
+                JSONVar indexInfo = pollenTypeInfo[i]["indexInfo"];
+                if (JSON.typeof(indexInfo) != "undefined") {
+                  maxUpi = (int)indexInfo["value"];
+                }
+                break;
+              }
+            }
+          }
+        }
+
+        if (maxUpi >= 0) {
+          if (maxUpi == 0) pollenLevel = "none";
+          else if (maxUpi == 1) pollenLevel = "very low";
+          else if (maxUpi == 2) pollenLevel = "low";
+          else if (maxUpi == 3) pollenLevel = "moderate";
+          else if (maxUpi == 4) pollenLevel = "high";
+          else if (maxUpi >= 5) pollenLevel = "very high";
+        } else {
+          pollenLevel = "n/a";
+        }
+        Serial.print("Pollen (GRASS) level: ");
+        Serial.println(pollenLevel);
+      }
+    } else {
+      Serial.print("Pollen API error: ");
+      Serial.println(httpResponseCode);
+      pollenLevel = "n/a";
+    }
+    httpPollen.end();
   } else {
-    Serial.print("Pollen API error: ");
-    Serial.println(httpResponseCode);
-    pollenLevel = "n/a";
-  }
+    // Open-Meteo Fallback
+    String pollenServerPath = "http://air-quality-api.open-meteo.com/v1/air-quality?latitude=46.9725&longitude=7.4528&current=pm2_5";
+    HTTPClient httpPollen;
+    httpPollen.begin(client, pollenServerPath);
+    httpResponseCode = httpPollen.GET();
 
-  httpPollen.end();
+    if (httpResponseCode == 200) {
+      pollenJsonBuffer = httpPollen.getString();
+      pollenObject = JSON.parse(pollenJsonBuffer);
+
+      if (JSON.typeof(pollenObject) != "undefined") {
+        double pm25Value = (double)pollenObject["current"]["pm2_5"];
+        int pm25 = (int)pm25Value;
+        
+        if (pm25 < 20) pollenLevel = "low";
+        else if (pm25 < 40) pollenLevel = "moderate";
+        else if (pm25 < 60) pollenLevel = "high";
+        else pollenLevel = "very high";
+        Serial.print("Pollen (PM2.5) level: ");
+        Serial.println(pollenLevel);
+      }
+    }
+    httpPollen.end();
+  }
 
   String aareServerPath = "http://aareguru.existenz.ch/v2018/today?city=bern&app=li.richert.smartframe&version=0.0.1";
   HTTPClient httpAare;
