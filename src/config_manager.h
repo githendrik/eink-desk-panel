@@ -28,6 +28,9 @@ public:
   // Firmware
   String firmwareVersion;
 
+  // Misc
+  String discordWebhookUrl;
+
   ConfigManager() : firmwareVersion("0.0.0") {}
 
   // Load all config from NVS
@@ -58,6 +61,10 @@ public:
     stravaRefreshToken = prefs.getString("refresh_token", "");
     prefs.end();
 
+    prefs.begin("misc", true);
+    discordWebhookUrl = prefs.getString("webhook", "");
+    prefs.end();
+
     prefs.begin("firmware", true);
     firmwareVersion = prefs.getString("version", "0.0.0");
     prefs.end();
@@ -71,6 +78,7 @@ public:
     saveWithings();
     saveGooglePollen();
     saveStrava();
+    saveMisc();
     saveFirmwareVersion();
   }
 
@@ -110,6 +118,13 @@ public:
     prefs.end();
   }
 
+  void saveMisc() {
+    Preferences prefs;
+    prefs.begin("misc", false);
+    prefs.putString("webhook", discordWebhookUrl);
+    prefs.end();
+  }
+
   void saveFirmwareVersion() {
     Preferences prefs;
     prefs.begin("firmware", false);
@@ -120,7 +135,7 @@ public:
   // Clear all NVS data (for factory reset)
   void clearAll() {
     Preferences prefs;
-    const char* namespaces[] = {"wifi", "withings", "google", "strava", "firmware"};
+    const char* namespaces[] = {"wifi", "withings", "google", "strava", "firmware", "misc"};
     for (auto ns : namespaces) {
       prefs.begin(ns, false);
       prefs.clear();

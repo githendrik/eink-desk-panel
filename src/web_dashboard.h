@@ -64,6 +64,9 @@ input{width:100%;padding:8px;margin-top:2px;border:1px solid #ccc;border-radius:
 <h2>Google Pollen</h2>
 <label>API Key<input type="password" id="g_pollen"></label>
 
+<h2>System Logging</h2>
+<label>Discord Webhook URL<input type="password" id="d_webhook"></label>
+
 <div style="margin-top:16px">
 <button class="btn btn-save" onclick="save()">Save Settings</button>
 <button class="btn btn-status" onclick="status()">Status</button>
@@ -90,8 +93,9 @@ function save(){
     s_cid:document.getElementById('s_cid').value,
     s_csec:document.getElementById('s_csec').value,
     s_at:document.getElementById('s_at').value,
-    s_rt:document.getElementById('s_rt').value
-    ,g_pollen:document.getElementById('g_pollen').value
+    s_rt:document.getElementById('s_rt').value,
+    g_pollen:document.getElementById('g_pollen').value,
+    d_webhook:document.getElementById('d_webhook').value
   };
   fetch('/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
   .then(function(r){return r.json()})
@@ -143,7 +147,8 @@ fetch('/status').then(function(r){return r.json()}).then(function(j){
   if(j.w_cid)document.getElementById('w_cid').value=j.w_cid;
   if(j.w_uid)document.getElementById('w_uid').value=j.w_uid;
   if(j.s_cid)document.getElementById('s_cid').value=j.s_cid;
-    if(j.g_pollen)document.getElementById('g_pollen').value=j.g_pollen;
+  if(j.g_pollen)document.getElementById('g_pollen').value=j.g_pollen;
+  if(j.d_webhook)document.getElementById('d_webhook').value=j.d_webhook;
 }).catch(function(){});
 </script>
 </body>
@@ -215,6 +220,12 @@ void setupWebDashboard() {
       if (val.length() > 0) config.stravaRefreshToken = val;
     }
 
+    // System Logging
+    if (JSON.typeof(obj["d_webhook"]) != "undefined") {
+      String val = (const char*)obj["d_webhook"];
+      if (val.length() > 0) config.discordWebhookUrl = val;
+    }
+
     config.saveAll();
     request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Settings saved. Restart to apply.\"}");
   });
@@ -231,8 +242,9 @@ void setupWebDashboard() {
     // Non-secret config values for form pre-fill
     json += "\"w_cid\":\"" + config.withingsClientId + "\",";
     json += "\"w_uid\":\"" + config.withingsUserId + "\",";
-    json += "\"s_cid\":\"" + config.stravaClientId + "\"";
-    json += ",\"g_pollen\":\"" + config.googlePollenApiKey + "\"";
+    json += "\"s_cid\":\"" + config.stravaClientId + "\",";
+    json += "\"g_pollen\":\"" + config.googlePollenApiKey + "\",";
+    json += "\"d_webhook\":\"" + config.discordWebhookUrl + "\"";
     json += "}";
     request->send(200, "application/json", json);
   });

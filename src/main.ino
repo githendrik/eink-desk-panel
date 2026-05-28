@@ -6,6 +6,7 @@
 #include "EPD.h"
 #include "EPD_GUI.h"
 #include "pic.h"
+#include "remote_log.h"
 #include "config_manager.h"
 
 #include "main_screen.h"
@@ -254,7 +255,13 @@ void loop() {
   if (millis() - lastWeatherFetch >= 1000UL*60*10) {
     Serial.println("Fetching weather data...");
     fetch_weather_data(httpResponseCode);
-    lastWeatherFetch = millis();
+    if (httpResponseCode == 200 || temperature.length() > 0) {
+      // Give it the full 10m before retrying next
+      lastWeatherFetch = millis();
+    } else {
+      // Failed - retry in 1 minute instead of waiting 10 minutes
+      lastWeatherFetch = millis() - (1000UL*60*9); 
+    }
     forceFullRefresh = false;
     display_main_screen(ImageBW, forceFullRefresh);
   }
