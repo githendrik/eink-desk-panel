@@ -2,10 +2,15 @@
 #define REMOTE_LOG_H
 
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include "config_manager.h"
 
 extern ConfigManager config;
+
+// Rate limiting: don't send more than 1 message per 5 seconds
+static unsigned long lastRemoteLogTime = 0;
+const unsigned long REMOTE_LOG_MIN_INTERVAL = 5000;
 
 void remote_log(const String& module, const String& message) {
   // Always log locally
@@ -14,27 +19,48 @@ void remote_log(const String& module, const String& message) {
   Serial.print("] ");
   Serial.println(message);
 
-  // If a URL is configured, push to remote
-  if (config.discordWebhookUrl.length() > 0 && WiFi.status() == WL_CONNECTED) {
-    // We launch this 'fire and forget'
-    HTTPClient http;
-    // Set a very short timeout so it doesn't block the UI refresh
-    http.setTimeout(1000); 
-    
-    // Quick basic auth / bearer auth could be added later if needed.
-    // For Discord webhooks, unauthenticated POST with JSON payload works.
-    http.begin(config.discordWebhookUrl);
-    http.addHeader("Content-Type", "application/json");
-
-    // Discord expects {"content": "..."} format in JSON
-    // We escape double quotes to handle valid JSON
-    String escapedMsg = message;
-    escapedMsg.replace("\"", "\\\"");
-    String jsonPayload = "{\"content\": \"[" + module + "] " + escapedMsg + "\"}";
-
-    http.POST(jsonPayload);
-    http.end();
+  // If no URL configured or WiFi down, skip
+  if (config.discordWebhookUrl.length() == 0 || WiFi.status() != WL_CONNECTED) {
+    return;
   }
+
+  // Rate limit to avoid blocking the main loop too often
+  if (millis() - lastRemoteLogTime < REMOTE_LOG_MIN_INTERVAL) {
+    return;
+  }
+
+  // Discord webhooks require HTTPS
+  WiFiClientSecure client;
+  client.setInsecure();  // Skip cert verification (constrained device)
+
+  HTTPClient http;
+  http.setTimeout(2000);
+  http.begin(client, config.discordWebhookUrl);
+  http.addHeader("Content-Type", "application/json");
+
+  // Escape JSON-special characters
+  String escapedMsg = message;
+  escapedMsg.replace("\\", "\\\\");
+  escapedMsg.replace("\"", "\\\"");
+  escapedMsg.replace("\n", "\\n");
+  escapedMsg.replace("\r", "\\r");
+
+  String escapedModule = module;
+  escapedModule.replace("\\", "\\\\");
+  escapedModule.replace("\"", "\\\"");
+
+  String jsonPayload = "{\"content\":\"[" + escapedModule + "] " + escapedMsg + "\"}";
+
+  int rc = http.POST(jsonPayload);
+  if (rc < 0) {
+    Serial.print("Remote log failed: ");
+    Serial.println(http.errorToString(rc));
+  } else if (rc == 429) {
+    Serial.println("Remote log rate-limited by Discord");
+  }
+  http.end();
+
+  lastRemoteLogTime = millis();
 }
 
 #endif
