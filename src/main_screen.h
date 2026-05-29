@@ -828,52 +828,78 @@ void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersio
 
 // ---- OTA Update Progress Screen ----
 void display_ota_screen(uint8_t* ImageBW, const char* version, int percent) {
+  static bool otaScreenInitialized = false;
   char buffer[64];
 
-  EPD_Init();
-  EPD_Clear();
-  EPD_Init_Fast(Fast_Seconds_1_5s);
-  Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
-  EPD_Full(WHITE);
-
   int midX = EPD_W / 2;
-
-  // Title
-  const char* title = "Updating Firmware";
-  int titleW = EPD_GetUTF8TextWidth(title, 24);
-  EPD_ShowStringUTF8(midX - titleW / 2, 60, title, 24, BLACK);
-
-  // Version line
-  memset(buffer, 0, sizeof(buffer));
-  snprintf(buffer, sizeof(buffer), "%s -> %s", FIRMWARE_VERSION, version);
-  int verW = EPD_GetUTF8TextWidth(buffer, 16);
-  EPD_ShowStringUTF8(midX - verW / 2, 100, buffer, 16, BLACK);
-
-  // Progress bar outline (280x30, centered)
   int barX = midX - 140;
   int barY = 150;
   int barW = 280;
   int barH = 30;
-  EPD_DrawRectangle(barX, barY, barX + barW, barY + barH, BLACK, 0);  // outline
 
-  // Fill progress
-  if (percent > 0) {
-    int fillW = (barW - 4) * percent / 100;
-    EPD_DrawRectangle(barX + 2, barY + 2, barX + 2 + fillW, barY + barH - 2, BLACK, 1);  // filled
+  if (!otaScreenInitialized) {
+    // First call: full clear and draw static elements
+    EPD_Init();
+    EPD_Clear();
+    EPD_Init_Fast(Fast_Seconds_1_5s);
+    Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
+    EPD_Full(WHITE);
+
+    // Title
+    const char* title = "Updating Firmware";
+    int titleW = EPD_GetUTF8TextWidth(title, 24);
+    EPD_ShowStringUTF8(midX - titleW / 2, 60, title, 24, BLACK);
+
+    // Version line
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "%s -> %s", FIRMWARE_VERSION, version);
+    int verW = EPD_GetUTF8TextWidth(buffer, 16);
+    EPD_ShowStringUTF8(midX - verW / 2, 100, buffer, 16, BLACK);
+
+    // Progress bar outline
+    EPD_DrawRectangle(barX, barY, barX + barW, barY + barH, BLACK, 0);
+
+    // Warning
+    const char* warn = "Do not power off!";
+    int warnW = EPD_GetUTF8TextWidth(warn, 12);
+    EPD_ShowStringUTF8(midX - warnW / 2, 250, warn, 12, BLACK);
+
+    // Fill progress (if > 0 on first call)
+    if (percent > 0) {
+      int fillW = (barW - 4) * percent / 100;
+      EPD_DrawRectangle(barX + 2, barY + 2, barX + 2 + fillW, barY + barH - 2, BLACK, 1);
+    }
+
+    // Percentage text
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "%d%%", percent);
+    int pctW = EPD_GetUTF8TextWidth(buffer, 24);
+    EPD_ShowStringUTF8(midX - pctW / 2, 200, buffer, 24, BLACK);
+
+    EPD_Display_Fast(ImageBW);
+    otaScreenInitialized = true;
+  } else {
+    // Subsequent calls: only update progress bar fill and percentage
+    // Clear the progress bar interior and percentage area in buffer
+    EPD_ClearWindows(barX + 2, barY + 2, barX + barW - 2, barY + barH - 2, WHITE);
+    EPD_ClearWindows(midX - 60, 200, midX + 60, 228, WHITE);  // percentage text area
+
+    // Redraw progress fill
+    if (percent > 0) {
+      int fillW = (barW - 4) * percent / 100;
+      EPD_DrawRectangle(barX + 2, barY + 2, barX + 2 + fillW, barY + barH - 2, BLACK, 1);
+    }
+
+    // Redraw percentage text
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "%d%%", percent);
+    int pctW = EPD_GetUTF8TextWidth(buffer, 24);
+    EPD_ShowStringUTF8(midX - pctW / 2, 200, buffer, 24, BLACK);
+
+    // Partial update: only the progress bar + percentage region
+    // Use full-width partial to keep it simple (bar area y=150 to percentage y=228)
+    EPD_Display_Part(0, barY, EPD_W, 228 - barY, ImageBW + (barY * EPD_W / 8));
   }
-
-  // Percentage text
-  memset(buffer, 0, sizeof(buffer));
-  snprintf(buffer, sizeof(buffer), "%d%%", percent);
-  int pctW = EPD_GetUTF8TextWidth(buffer, 24);
-  EPD_ShowStringUTF8(midX - pctW / 2, 200, buffer, 24, BLACK);
-
-  // Warning
-  const char* warn = "Do not power off!";
-  int warnW = EPD_GetUTF8TextWidth(warn, 12);
-  EPD_ShowStringUTF8(midX - warnW / 2, 250, warn, 12, BLACK);
-
-  EPD_Display_Fast(ImageBW);
 }
 
 // ---- AP / Captive Portal Screen ----
