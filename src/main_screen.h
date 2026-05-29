@@ -727,10 +727,11 @@ void fetch_weather_data() {
 void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersion) {
   char buffer[64];
 
+  EPD_Init();
+  EPD_Clear();
   EPD_Init_Fast(Fast_Seconds_1_5s);
   Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
   EPD_Full(WHITE);
-  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
 
   int midX = EPD_W / 2;
   int y = 20;
@@ -822,17 +823,18 @@ void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersio
   int footW = EPD_GetUTF8TextWidth(footer, 12);
   EPD_ShowStringUTF8(midX - footW / 2, EPD_H - 20, footer, 12, BLACK);
 
-  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+  EPD_Display_Fast(ImageBW);
 }
 
 // ---- OTA Update Progress Screen ----
 void display_ota_screen(uint8_t* ImageBW, const char* version, int percent) {
   char buffer[64];
 
+  EPD_Init();
+  EPD_Clear();
   EPD_Init_Fast(Fast_Seconds_1_5s);
   Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
   EPD_Full(WHITE);
-  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
 
   int midX = EPD_W / 2;
 
@@ -871,7 +873,7 @@ void display_ota_screen(uint8_t* ImageBW, const char* version, int percent) {
   int warnW = EPD_GetUTF8TextWidth(warn, 12);
   EPD_ShowStringUTF8(midX - warnW / 2, 250, warn, 12, BLACK);
 
-  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+  EPD_Display_Fast(ImageBW);
 }
 
 // ---- AP / Captive Portal Screen ----
@@ -917,7 +919,7 @@ void display_ap_screen(uint8_t* ImageBW, const char* ssid, const char* ip) {
   int s3W = EPD_GetUTF8TextWidth(step3, 16);
   EPD_ShowStringUTF8(midX - s3W / 2, 230, step3, 16, BLACK);
 
-  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+  EPD_Display_Fast(ImageBW);
 }
 
 void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
