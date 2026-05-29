@@ -66,6 +66,15 @@ input{width:100%;padding:8px;margin-top:2px;border:1px solid #ccc;border-radius:
 
 <h2>System Logging</h2>
 <label>Discord Webhook URL<input type="password" id="d_webhook"></label>
+<label>Remote Log Level
+<select id="d_loglevel">
+<option value="0">DEBUG (all)</option>
+<option value="1">INFO</option>
+<option value="2">WARN</option>
+<option value="3">ERROR</option>
+<option value="4">OFF</option>
+</select>
+</label>
 
 <div style="margin-top:16px">
 <button class="btn btn-save" onclick="save()">Save Settings</button>
@@ -95,7 +104,8 @@ function save(){
     s_at:document.getElementById('s_at').value,
     s_rt:document.getElementById('s_rt').value,
     g_pollen:document.getElementById('g_pollen').value,
-    d_webhook:document.getElementById('d_webhook').value
+    d_webhook:document.getElementById('d_webhook').value,
+    d_loglevel:parseInt(document.getElementById('d_loglevel').value)
   };
   fetch('/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
   .then(function(r){return r.json()})
@@ -149,6 +159,7 @@ fetch('/status').then(function(r){return r.json()}).then(function(j){
   if(j.s_cid)document.getElementById('s_cid').value=j.s_cid;
   if(j.g_pollen)document.getElementById('g_pollen').value=j.g_pollen;
   if(j.d_webhook)document.getElementById('d_webhook').value=j.d_webhook;
+  if(j.d_loglevel!==undefined)document.getElementById('d_loglevel').value=j.d_loglevel;
 }).catch(function(){});
 </script>
 </body>
@@ -225,6 +236,10 @@ void setupWebDashboard() {
       String val = (const char*)obj["d_webhook"];
       if (val.length() > 0) config.discordWebhookUrl = val;
     }
+    if (JSON.typeof(obj["d_loglevel"]) != "undefined") {
+      int val = (int)obj["d_loglevel"];
+      if (val >= 0 && val <= 4) config.remoteLogLevel = val;
+    }
 
     config.saveAll();
     request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Settings saved. Restart to apply.\"}");
@@ -244,7 +259,8 @@ void setupWebDashboard() {
     json += "\"w_uid\":\"" + config.withingsUserId + "\",";
     json += "\"s_cid\":\"" + config.stravaClientId + "\",";
     json += "\"g_pollen\":\"" + config.googlePollenApiKey + "\",";
-    json += "\"d_webhook\":\"" + config.discordWebhookUrl + "\"";
+    json += "\"d_webhook\":\"" + config.discordWebhookUrl + "\",";
+    json += "\"d_loglevel\":" + String(config.remoteLogLevel);
     json += "}";
     request->send(200, "application/json", json);
   });

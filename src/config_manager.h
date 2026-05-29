@@ -30,8 +30,9 @@ public:
 
   // Misc
   String discordWebhookUrl;
+  int remoteLogLevel;  // 0=DEBUG, 1=INFO, 2=WARN, 3=ERROR, 4=OFF
 
-  ConfigManager() : firmwareVersion("0.0.0") {}
+  ConfigManager() : firmwareVersion("0.0.0"), remoteLogLevel(3) {}  // Default: ERROR only
 
   // Load all config from NVS
   void loadAll() {
@@ -63,6 +64,7 @@ public:
 
     prefs.begin("misc", true);
     discordWebhookUrl = prefs.getString("webhook", "");
+    remoteLogLevel = prefs.getInt("log_level", 3);  // Default: ERROR
     prefs.end();
 
     prefs.begin("firmware", true);
@@ -122,6 +124,7 @@ public:
     Preferences prefs;
     prefs.begin("misc", false);
     prefs.putString("webhook", discordWebhookUrl);
+    prefs.putInt("log_level", remoteLogLevel);
     prefs.end();
   }
 

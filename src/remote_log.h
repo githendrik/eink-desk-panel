@@ -8,16 +8,34 @@
 
 extern ConfigManager config;
 
+// Log levels: 0=DEBUG, 1=INFO, 2=WARN, 3=ERROR, 4=OFF
+enum LogLevel {
+  LOG_DEBUG = 0,
+  LOG_INFO = 1,
+  LOG_WARN = 2,
+  LOG_ERROR = 3,
+  LOG_OFF = 4
+};
+
+static const char* LOG_LEVEL_NAMES[] = {"DEBUG", "INFO", "WARN", "ERROR", "OFF"};
+
 // Rate limiting: don't send more than 1 message per 5 seconds
 static unsigned long lastRemoteLogTime = 0;
 const unsigned long REMOTE_LOG_MIN_INTERVAL = 5000;
 
-void remote_log(const String& module, const String& message) {
+void remote_log(LogLevel level, const String& module, const String& message) {
   // Always log locally
   Serial.print("[");
+  Serial.print(LOG_LEVEL_NAMES[level]);
+  Serial.print("] [");
   Serial.print(module);
   Serial.print("] ");
   Serial.println(message);
+
+  // Skip remote if level is below configured threshold
+  if (level < config.remoteLogLevel) {
+    return;
+  }
 
   // If no URL configured or WiFi down, skip
   if (config.discordWebhookUrl.length() == 0 || WiFi.status() != WL_CONNECTED) {
@@ -49,7 +67,7 @@ void remote_log(const String& module, const String& message) {
   escapedModule.replace("\\", "\\\\");
   escapedModule.replace("\"", "\\\"");
 
-  String jsonPayload = "{\"content\":\"[" + escapedModule + "] " + escapedMsg + "\"}";
+  String jsonPayload = "{\"content\":\"[" + String(LOG_LEVEL_NAMES[level]) + "] [" + escapedModule + "] " + escapedMsg + "\"}";
 
   int rc = http.POST(jsonPayload);
   if (rc < 0) {

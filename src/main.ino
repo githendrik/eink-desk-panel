@@ -260,14 +260,16 @@ void loop() {
     }
   }
 
+  // Track whether any data was fetched this loop iteration
+  bool needsRedraw = false;
+
   // Open-Meteo fetch (temperature, rain, UV)
   unsigned long openmeteoInterval = (openmeteoFailCount > 0) ? RETRY_INTERVAL : OPENMETEO_INTERVAL;
   if (millis() - lastOpenmeteoFetch >= openmeteoInterval) {
     Serial.println("Fetching Open-Meteo data...");
     fetch_openmeteo_data();
     lastOpenmeteoFetch = millis();
-    forceFullRefresh = false;
-    display_main_screen(ImageBW, forceFullRefresh);
+    needsRedraw = true;
   }
 
   // Pollen fetch
@@ -276,8 +278,7 @@ void loop() {
     Serial.println("Fetching pollen data...");
     fetch_pollen_data();
     lastPollenFetch = millis();
-    forceFullRefresh = false;
-    display_main_screen(ImageBW, forceFullRefresh);
+    needsRedraw = true;
   }
 
   // Aare fetch
@@ -286,22 +287,25 @@ void loop() {
     Serial.println("Fetching Aare data...");
     fetch_aare_data();
     lastAareFetch = millis();
-    forceFullRefresh = false;
-    display_main_screen(ImageBW, forceFullRefresh);
+    needsRedraw = true;
   }
 
   if (millis() - lastWeightFetch >= 1000UL*60*60*6) {
     Serial.println("Fetching weight data...");
     fetch_weight_data(httpResponseCode);
     lastWeightFetch = millis();
-    forceFullRefresh = false;
-    display_main_screen(ImageBW, forceFullRefresh);
+    needsRedraw = true;
   }
 
   if (millis() - lastStravaFetch >= 1000UL*60*60) {
     Serial.println("Fetching Strava data...");
     fetch_strava_data(httpResponseCode);
     lastStravaFetch = millis();
+    needsRedraw = true;
+  }
+
+  // Single repaint after all fetches are done
+  if (needsRedraw) {
     forceFullRefresh = false;
     display_main_screen(ImageBW, forceFullRefresh);
   }

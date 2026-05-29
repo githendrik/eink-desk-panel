@@ -100,7 +100,7 @@ void fetch_withings_token(int& httpResponseCode) {
   
   if (httpResponseCode == 200) {
     String payload = http.getString();
-    remote_log("Withings_Token", "Success");
+    remote_log(LOG_INFO, "Withings_Token", "Success");
     Serial.println("Withings token response:");
     Serial.println(payload);
     
@@ -138,7 +138,7 @@ void fetch_withings_token(int& httpResponseCode) {
       }
     }
   } else {
-    remote_log("Withings_Token", "Failed to refresh token. HTTP: " + String(httpResponseCode));
+    remote_log(LOG_ERROR, "Withings_Token", "Failed to refresh token. HTTP: " + String(httpResponseCode));
     Serial.print("Failed to refresh Withings token. HTTP code: ");
     Serial.println(httpResponseCode);
   }
@@ -190,7 +190,7 @@ void fetch_weight_data(int& httpResponseCode, bool retry = true) {
 
   if (httpResponseCode == 200) {
     weightJsonBuffer = http.getString();
-    remote_log("Withings_Weight", "Success HTTP 200");
+    remote_log(LOG_INFO, "Withings_Weight", "Success HTTP 200");
     Serial.println(weightJsonBuffer);
     weightObject = JSON.parse(weightJsonBuffer);
 
@@ -271,7 +271,7 @@ void fetch_weight_data(int& httpResponseCode, bool retry = true) {
       }
     }
   } else if (httpResponseCode == 401 && retry) {
-    remote_log("Withings_Weight", "Token expired (401), refreshing");
+    remote_log(LOG_WARN, "Withings_Weight", "Token expired (401), refreshing");
     Serial.println("Token expired, refreshing...");
     fetch_withings_token(httpResponseCode);
     if (httpResponseCode == 200) {
@@ -281,7 +281,7 @@ void fetch_weight_data(int& httpResponseCode, bool retry = true) {
       return;
     }
   } else {
-    remote_log("Withings_Weight", "API Error HTTP " + String(httpResponseCode));
+    remote_log(LOG_ERROR, "Withings_Weight", "API Error HTTP " + String(httpResponseCode));
     Serial.print("Withings API error: ");
     Serial.println(httpResponseCode);
     weight = "--.-";
@@ -313,7 +313,7 @@ void fetch_strava_token(int& httpResponseCode) {
   
   if (httpResponseCode == 200) {
     String payload = http.getString();
-    remote_log("Strava_Token", "Success");
+    remote_log(LOG_INFO, "Strava_Token", "Success");
     Serial.println("Strava token response:");
     Serial.println(payload);
     
@@ -333,7 +333,7 @@ void fetch_strava_token(int& httpResponseCode) {
       Serial.println("Strava token updated successfully");
     }
   } else {
-    remote_log("Strava_Token", "Error. HTTP: " + String(httpResponseCode));
+    remote_log(LOG_ERROR, "Strava_Token", "Error. HTTP: " + String(httpResponseCode));
     Serial.print("Failed to refresh Strava token. HTTP code: ");
     Serial.println(httpResponseCode);
   }
@@ -369,7 +369,7 @@ void fetch_strava_data(int& httpResponseCode, bool retry = true) {
   http.addHeader("Authorization", "Bearer " + config.stravaAccessToken);
   
   httpResponseCode = http.GET();
-  remote_log("Strava_Data", "API returned HTTP: " + String(httpResponseCode));
+  remote_log(LOG_DEBUG, "Strava_Data", "API returned HTTP: " + String(httpResponseCode));
   Serial.print("Strava HTTP code: ");
   Serial.println(httpResponseCode);
   
@@ -543,12 +543,12 @@ bool fetch_openmeteo_data() {
 
     Serial.print("Temperature: ");
     Serial.println(temperature);
-    remote_log("OpenMeteo", "Success. Temp: " + temperature + " Rain: " + rainStatus + " UV: " + String(uvIndexMax));
+    remote_log(LOG_INFO, "OpenMeteo", "Success. Temp: " + temperature + " Rain: " + rainStatus + " UV: " + String(uvIndexMax));
     http.end();
     openmeteoFailCount = 0;
     return true;
   } else {
-    remote_log("OpenMeteo", "API Error HTTP: " + String(rc));
+    remote_log(LOG_ERROR, "OpenMeteo", "API Error HTTP: " + String(rc));
     Serial.print("Weather API error: ");
     Serial.println(rc);
     http.end();
@@ -579,7 +579,7 @@ bool fetch_pollen_data() {
 
     if (rc == 200) {
       pollenJsonBuffer = httpPollen.getString();
-      remote_log("Pollen_Google", "Success");
+      remote_log(LOG_INFO, "Pollen_Google", "Success");
       pollenObject = JSON.parse(pollenJsonBuffer);
 
       if (JSON.typeof(pollenObject) != "undefined") {
@@ -618,7 +618,7 @@ bool fetch_pollen_data() {
       pollenFailCount = 0;
       return true;
     } else {
-      remote_log("Pollen_Google", "Error HTTP: " + String(rc));
+      remote_log(LOG_ERROR, "Pollen_Google", "Error HTTP: " + String(rc));
       Serial.print("Pollen API error: ");
       Serial.println(rc);
       httpPollen.end();
@@ -635,7 +635,7 @@ bool fetch_pollen_data() {
 
     if (rc == 200) {
       pollenJsonBuffer = httpPollen.getString();
-      remote_log("Pollen_OpenMeteo", "Success");
+      remote_log(LOG_INFO, "Pollen_OpenMeteo", "Success");
       pollenObject = JSON.parse(pollenJsonBuffer);
 
       if (JSON.typeof(pollenObject) != "undefined") {
@@ -653,7 +653,7 @@ bool fetch_pollen_data() {
       pollenFailCount = 0;
       return true;
     } else {
-      remote_log("Pollen_OpenMeteo", "Error HTTP: " + String(rc));
+      remote_log(LOG_ERROR, "Pollen_OpenMeteo", "Error HTTP: " + String(rc));
       Serial.print("Pollen fallback API error: ");
       Serial.println(rc);
       httpPollen.end();
@@ -679,7 +679,7 @@ bool fetch_aare_data() {
 
   if (rc == 200) {
     aareJsonBuffer = httpAare.getString();
-    remote_log("Aare", "Success HTTP 200");
+    remote_log(LOG_INFO, "Aare", "Success HTTP 200");
     Serial.println(aareJsonBuffer);
     aareObject = JSON.parse(aareJsonBuffer);
 
@@ -702,7 +702,7 @@ bool fetch_aare_data() {
     aareFailCount = 0;
     return true;
   } else {
-    remote_log("Aare", "Error HTTP: " + String(rc));
+    remote_log(LOG_ERROR, "Aare", "Error HTTP: " + String(rc));
     Serial.print("Aare API error: ");
     Serial.println(rc);
     httpAare.end();
