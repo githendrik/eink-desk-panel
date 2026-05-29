@@ -922,18 +922,23 @@ void display_ap_screen(uint8_t* ImageBW, const char* ssid, const char* ip) {
 
 void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   static char buffer[64];
+  static int refreshCount = 0;
 
-  if (forceFullRefresh) {
+  // Every 10th refresh, do a full clear to prevent DC bias / ghosting buildup
+  if (forceFullRefresh || refreshCount >= 10) {
     EPD_Init();
     EPD_Clear();
     forceFullRefresh = false;
+    refreshCount = 0;
   }
+
+  refreshCount++;
 
   EPD_Init_Fast(Fast_Seconds_1_5s);
   
+  // Prepare buffer in RAM (no visible flash)
   Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
-  EPD_Full(WHITE);
-  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+  EPD_Full(WHITE);  // fills software buffer only
 
   int midX = EPD_W / 2;
   int topHeight = EPD_H - 70;  // Give temps 70%+ of screen
@@ -1068,7 +1073,8 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     EPD_ShowStringUTF8(rightCenter - trendWidth / 2, bottomY + 28, buffer, 12, BLACK);
   }
 
-  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+  // Push composed buffer to display in one shot (Mode 1 - no flash, no ghosting)
+  EPD_Display_Fast(ImageBW);
 }
 
 #endif
