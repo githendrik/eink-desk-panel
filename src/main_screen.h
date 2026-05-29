@@ -942,6 +942,16 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
   EPD_Full(WHITE);  // fills software buffer only
 
+  // Write white to OLD RAM (register 0x26) so the controller knows
+  // "current display state is white" — this avoids the visible white flash
+  // that EPD_Display_Part would otherwise need to sync old RAM
+  EPD_Address_Set(0, 0, EPD_W - 1, EPD_H - 1);
+  EPD_SetCursor(0, 0);
+  EPD_WR_REG(0x26);
+  for (int i = 0; i < (EPD_W / 8) * EPD_H; i++) {
+    EPD_WR_DATA8(0xFF);
+  }
+
   int midX = EPD_W / 2;
   int topHeight = EPD_H - 70;  // Give temps 70%+ of screen
 
@@ -1075,8 +1085,9 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     EPD_ShowStringUTF8(rightCenter - trendWidth / 2, bottomY + 28, buffer, 12, BLACK);
   }
 
-  // Push composed buffer to display in one shot (Mode 1 - no flash, no ghosting)
-  EPD_Display_Fast(ImageBW);
+  // Push composed buffer to display using partial update (Mode 2)
+  // Only pixels that differ from old RAM (white) will be driven
+  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
 }
 
 #endif

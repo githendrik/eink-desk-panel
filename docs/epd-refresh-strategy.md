@@ -124,3 +124,55 @@ Implement `EPD_Init_Part()` with a proper partial-refresh LUT for the SSD1683. T
 | 0x80 | `EPD_Display_Part` | Border HiZ (floating, prevents border flash during partial) |
 
 Note: `EPD_Display_Fast` does NOT set 0x3C to 0x80. If border flashing is observed during fast updates, adding `EPD_WR_REG(0x3C); EPD_WR_DATA8(0x80);` before `EPD_Display_Fast` may help.
+
+## Iteration History
+
+### v0.3.4: EPD_Display_Fast (Mode 1) — FAILED
+
+**Approach:** Replace `EPD_Display_Part` with `EPD_Display_Fast` (command 0xC7, Mode 1) which drives all pixels to target state without old/new RAM comparison.
+
+**Result:** The panel flashes black/white/black/white repeatedly on each soft update. Mode 1 drives a full voltage cycle on every pixel every time, which is more visually distracting than the original white-flash approach. Reverted.
+
+**Lesson:** On this SSD1683 panel with `EPD_Init_Fast` temperature trick, Mode 1 is NOT a gentle "overwrite" — it's essentially a mini full-refresh that's more aggressive than Mode 2.
+
+### v0.3.7: Mode 2 with Old RAM Sync — CURRENT
+
+**Approach:** Write white (0xFF) to register 0x26 (old RAM) directly before each update, then use `EPD_Display_Part` (Mode 2). This tells the controller "the display currently shows white" so it only drives pixels that need to transition from white to black.
+
+```cpp
+EPD_Init_Fast(Fast_Seconds_1_5s);
+Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
+EPD_Full(WHITE);  // software buffer only
+
+// Sync old RAM to white (no visible effect)
+EPD_Address_Set(0, 0, EPD_W - 1, EPD_H - 1);
+EPD_SetCursor(0, 0);
+EPD_WR_REG(0x26);
+for (int i = 0; i < (EPD_W / 8) * EPD_H; i++) {
+  EPD_WR_DATA8(0xFF);
+}
+
+// ... draw content into buffer ...
+
+// Mode 2: only drives pixels that differ from old RAM
+EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+```
+
+**Expected behavior:** No white flash. The controller sees old=white, new=content, and only drives the black pixels. Pixels that were already black from the previous frame and are still black won't be driven (the controller thinks they were white, so it will drive them black — which is correct since we cleared the buffer to white and redrew everything).
+
+**Risk:** If the physical display has residual content that doesn't match "white", those pixels won't be driven correctly. The every-10th full clear mitigates this by periodically resetting everything.
+
+**If this ghosts:** Reduce the full-clear interval from 10 to 5 or 3. If ghosting is severe, revert to the original approach (Option A in Fallback Plan above).
+
+### Original approach (pre-v0.3.4) for reference
+
+```cpp
+EPD_Init_Fast(Fast_Seconds_1_5s);
+Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
+EPD_Full(WHITE);
+EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);  // visible white flash (syncs old RAM)
+// ... draw content ...
+EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);  // content appears
+```
+
+This is the safest approach — always works, no ghosting, but has a visible white flash on every update.
