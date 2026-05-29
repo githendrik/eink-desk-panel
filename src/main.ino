@@ -148,7 +148,7 @@ void setup() {
     }
   }
 
-  fetch_weather_data(httpResponseCode);
+  fetch_weather_data();
   fetch_weight_data(httpResponseCode);
   fetch_strava_data(httpResponseCode);
 
@@ -156,9 +156,17 @@ void setup() {
 }
 
 void loop() {
-  static unsigned long lastWeatherFetch = 0;
+  static unsigned long lastOpenmeteoFetch = 0;
+  static unsigned long lastPollenFetch = 0;
+  static unsigned long lastAareFetch = 0;
   static unsigned long lastWeightFetch = 0;
   static unsigned long lastStravaFetch = 0;
+
+  // Intervals
+  const unsigned long OPENMETEO_INTERVAL = 1000UL * 60 * 10;  // 10 min
+  const unsigned long POLLEN_INTERVAL = 1000UL * 60 * 60;     // 1 hour (pollen doesn't change fast)
+  const unsigned long AARE_INTERVAL = 1000UL * 60 * 10;       // 10 min
+  const unsigned long RETRY_INTERVAL = 1000UL * 60 * 1;       // 1 min retry on failure
 
   // Dashboard-triggered OTA check
   if (otaCheckTriggered) {
@@ -252,16 +260,32 @@ void loop() {
     }
   }
 
-  if (millis() - lastWeatherFetch >= 1000UL*60*10) {
-    Serial.println("Fetching weather data...");
-    fetch_weather_data(httpResponseCode);
-    if (httpResponseCode == 200 || temperature.length() > 0) {
-      // Give it the full 10m before retrying next
-      lastWeatherFetch = millis();
-    } else {
-      // Failed - retry in 1 minute instead of waiting 10 minutes
-      lastWeatherFetch = millis() - (1000UL*60*9); 
-    }
+  // Open-Meteo fetch (temperature, rain, UV)
+  unsigned long openmeteoInterval = (openmeteoFailCount > 0) ? RETRY_INTERVAL : OPENMETEO_INTERVAL;
+  if (millis() - lastOpenmeteoFetch >= openmeteoInterval) {
+    Serial.println("Fetching Open-Meteo data...");
+    fetch_openmeteo_data();
+    lastOpenmeteoFetch = millis();
+    forceFullRefresh = false;
+    display_main_screen(ImageBW, forceFullRefresh);
+  }
+
+  // Pollen fetch
+  unsigned long pollenInterval = (pollenFailCount > 0) ? RETRY_INTERVAL : POLLEN_INTERVAL;
+  if (millis() - lastPollenFetch >= pollenInterval) {
+    Serial.println("Fetching pollen data...");
+    fetch_pollen_data();
+    lastPollenFetch = millis();
+    forceFullRefresh = false;
+    display_main_screen(ImageBW, forceFullRefresh);
+  }
+
+  // Aare fetch
+  unsigned long aareInterval = (aareFailCount > 0) ? RETRY_INTERVAL : AARE_INTERVAL;
+  if (millis() - lastAareFetch >= aareInterval) {
+    Serial.println("Fetching Aare data...");
+    fetch_aare_data();
+    lastAareFetch = millis();
     forceFullRefresh = false;
     display_main_screen(ImageBW, forceFullRefresh);
   }

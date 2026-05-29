@@ -27,6 +27,30 @@ String stravaActivityDate = "";  // e.g. "2h ago" or "3d ago"
 // Bottom-right display mode: 0 = strava (default for now), 1 = weight
 int bottomRightMode = 1;
 
+// Staleness tracking: count consecutive failures per source
+// After 2 consecutive failures, data is considered stale
+int openmeteoFailCount = 0;
+int aareFailCount = 0;
+int pollenFailCount = 0;
+const int STALE_THRESHOLD = 2;
+
+// Build a staleness message for display in the aare text area
+String getStalenessMessage() {
+  String msg = "";
+  if (openmeteoFailCount >= STALE_THRESHOLD) {
+    msg += "Weather stale";
+  }
+  if (aareFailCount >= STALE_THRESHOLD) {
+    if (msg.length() > 0) msg += " | ";
+    msg += "Aare stale";
+  }
+  if (pollenFailCount >= STALE_THRESHOLD) {
+    if (msg.length() > 0) msg += " | ";
+    msg += "Pollen stale";
+  }
+  return msg;
+}
+
 String jsonBuffer;
 JSONVar myObject;
 String aareJsonBuffer;
@@ -413,10 +437,12 @@ void fetch_strava_data(int& httpResponseCode, bool retry = true) {
   http.end();
 }
 
-void fetch_weather_data(int& httpResponseCode) {
+// Returns true on success, false on failure
+bool fetch_openmeteo_data() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi Disconnected");
-    return;
+    openmeteoFailCount++;
+    return false;
   }
 
   bool currentlyRaining = false;
@@ -432,18 +458,18 @@ void fetch_weather_data(int& httpResponseCode) {
   WiFiClient client;
   HTTPClient http;
   http.begin(client, serverPath);
-  httpResponseCode = http.GET();
+  int rc = http.GET();
 
-  if (httpResponseCode == 200) {
+  if (rc == 200) {
     jsonBuffer = http.getString();
-    remote_log("OpenMeteo", "Success HTTP 200. Rain: " + rainStatus + " UV: " + String(uvIndexMax));
     Serial.println(jsonBuffer);
     myObject = JSON.parse(jsonBuffer);
 
     if (JSON.typeof(myObject) == "undefined") {
       Serial.println("Parsing input failed!");
       http.end();
-      return;
+      openmeteoFailCount++;
+      return false;
     }
 
     // Current temperature
@@ -472,10 +498,6 @@ void fetch_weather_data(int& httpResponseCode) {
     // Hourly forecast for rain prediction
     if (JSON.typeof(myObject["hourly"]["weather_code"]) != "undefined") {
       int hourlyCount = myObject["hourly"]["weather_code"].length();
-      time_t now = time(NULL);
-
-      // Parse the first hourly timestamp to calculate offsets
-      String firstTimeStr = (const char*)myObject["hourly"]["time"][0];
 
       for (int i = 0; i < hourlyCount && i < 8; i++) {
         int fCode = (int)(double)myObject["hourly"]["weather_code"][i];
@@ -521,10 +543,26 @@ void fetch_weather_data(int& httpResponseCode) {
 
     Serial.print("Temperature: ");
     Serial.println(temperature);
+    remote_log("OpenMeteo", "Success. Temp: " + temperature + " Rain: " + rainStatus + " UV: " + String(uvIndexMax));
+    http.end();
+    openmeteoFailCount = 0;
+    return true;
   } else {
-    remote_log("OpenMeteo", "API Error HTTP: " + String(httpResponseCode));
+    remote_log("OpenMeteo", "API Error HTTP: " + String(rc));
     Serial.print("Weather API error: ");
-    Serial.println(httpResponseCode);
+    Serial.println(rc);
+    http.end();
+    openmeteoFailCount++;
+    return false;
+  }
+}
+
+// Returns true on success, false on failure
+bool fetch_pollen_data() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi Disconnected");
+    pollenFailCount++;
+    return false;
   }
 
   // Google Pollen API (specifically GRASS)
@@ -537,9 +575,9 @@ void fetch_weather_data(int& httpResponseCode) {
     
     HTTPClient httpPollen;
     httpPollen.begin(secureClient, pollenServerPath);
-    httpResponseCode = httpPollen.GET();
+    int rc = httpPollen.GET();
 
-    if (httpResponseCode == 200) {
+    if (rc == 200) {
       pollenJsonBuffer = httpPollen.getString();
       remote_log("Pollen_Google", "Success");
       pollenObject = JSON.parse(pollenJsonBuffer);
@@ -576,21 +614,26 @@ void fetch_weather_data(int& httpResponseCode) {
         Serial.print("Pollen (GRASS) level: ");
         Serial.println(pollenLevel);
       }
+      httpPollen.end();
+      pollenFailCount = 0;
+      return true;
     } else {
-      remote_log("Pollen_Google", "Error HTTP: " + String(httpResponseCode));
+      remote_log("Pollen_Google", "Error HTTP: " + String(rc));
       Serial.print("Pollen API error: ");
-      Serial.println(httpResponseCode);
-      pollenLevel = "n/a";
+      Serial.println(rc);
+      httpPollen.end();
+      pollenFailCount++;
+      return false;
     }
-    httpPollen.end();
   } else {
     // Open-Meteo Fallback
     String pollenServerPath = "http://air-quality-api.open-meteo.com/v1/air-quality?latitude=46.9725&longitude=7.4528&current=pm2_5";
+    WiFiClient client;
     HTTPClient httpPollen;
     httpPollen.begin(client, pollenServerPath);
-    httpResponseCode = httpPollen.GET();
+    int rc = httpPollen.GET();
 
-    if (httpResponseCode == 200) {
+    if (rc == 200) {
       pollenJsonBuffer = httpPollen.getString();
       remote_log("Pollen_OpenMeteo", "Success");
       pollenObject = JSON.parse(pollenJsonBuffer);
@@ -606,16 +649,35 @@ void fetch_weather_data(int& httpResponseCode) {
         Serial.print("Pollen (PM2.5) level: ");
         Serial.println(pollenLevel);
       }
+      httpPollen.end();
+      pollenFailCount = 0;
+      return true;
+    } else {
+      remote_log("Pollen_OpenMeteo", "Error HTTP: " + String(rc));
+      Serial.print("Pollen fallback API error: ");
+      Serial.println(rc);
+      httpPollen.end();
+      pollenFailCount++;
+      return false;
     }
-    httpPollen.end();
+  }
+}
+
+// Returns true on success, false on failure
+bool fetch_aare_data() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi Disconnected");
+    aareFailCount++;
+    return false;
   }
 
+  WiFiClient client;
   String aareServerPath = "http://aareguru.existenz.ch/v2018/today?city=bern&app=li.richert.smartframe&version=0.0.1";
   HTTPClient httpAare;
   httpAare.begin(client, aareServerPath);
-  httpResponseCode = httpAare.GET();
+  int rc = httpAare.GET();
 
-  if (httpResponseCode == 200) {
+  if (rc == 200) {
     aareJsonBuffer = httpAare.getString();
     remote_log("Aare", "Success HTTP 200");
     Serial.println(aareJsonBuffer);
@@ -624,7 +686,8 @@ void fetch_weather_data(int& httpResponseCode) {
     if (JSON.typeof(aareObject) == "undefined") {
       Serial.println("Parsing aare data failed!");
       httpAare.end();
-      return;
+      aareFailCount++;
+      return false;
     }
 
     aareTemp = String((int)round((double)aareObject["aare"]));
@@ -635,15 +698,24 @@ void fetch_weather_data(int& httpResponseCode) {
     Serial.println(aareTemp);
     Serial.print("Aare text: ");
     Serial.println(aareText);
+    httpAare.end();
+    aareFailCount = 0;
+    return true;
   } else {
-    remote_log("Aare", "Error HTTP: " + String(httpResponseCode));
+    remote_log("Aare", "Error HTTP: " + String(rc));
     Serial.print("Aare API error: ");
-    Serial.println(httpResponseCode);
+    Serial.println(rc);
+    httpAare.end();
+    aareFailCount++;
+    return false;
   }
+}
 
-  httpAare.end();
-
-  fetch_weight_data(httpResponseCode);
+// Legacy wrapper for initial boot fetch (calls all three)
+void fetch_weather_data() {
+  fetch_openmeteo_data();
+  fetch_pollen_data();
+  fetch_aare_data();
 }
 
 
@@ -903,13 +975,25 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   labelWidth = EPD_GetUTF8TextWidth(buffer, 16);
   EPD_ShowStringUTF8(rightCenter - labelWidth / 2, 115, buffer, 16, BLACK);
 
-  // Middle: AareGuru text, centered
-  if (aareText.length() > 0) {
-    // Truncate to fit display width with margin
-    int maxWidth = EPD_W - 40;
-    char aareTextBuf[64];
+  // Middle: AareGuru text or staleness warning, centered
+  String staleMsg = getStalenessMessage();
+  const char* middleText = nullptr;
+  char aareTextBuf[64];
+  
+  if (staleMsg.length() > 0) {
+    // Show staleness warning instead of aare text
+    strncpy(aareTextBuf, staleMsg.c_str(), sizeof(aareTextBuf) - 1);
+    aareTextBuf[sizeof(aareTextBuf) - 1] = '\0';
+    middleText = aareTextBuf;
+  } else if (aareText.length() > 0) {
     strncpy(aareTextBuf, aareText.c_str(), sizeof(aareTextBuf) - 1);
     aareTextBuf[sizeof(aareTextBuf) - 1] = '\0';
+    middleText = aareTextBuf;
+  }
+
+  if (middleText != nullptr) {
+    // Truncate to fit display width with margin
+    int maxWidth = EPD_W - 40;
     // Trim until it fits
     while (strlen(aareTextBuf) > 0 && EPD_GetUTF8TextWidth(aareTextBuf, 16) > maxWidth) {
       aareTextBuf[strlen(aareTextBuf) - 1] = '\0';
