@@ -925,6 +925,16 @@ void display_ap_screen(uint8_t* ImageBW, const char* ssid, const char* ip) {
 void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   static char buffer[64];
   static int refreshCount = 0;
+  static uint8_t* prevFrame = nullptr;
+  const int frameSize = (EPD_W / 8) * EPD_H;  // 15000 bytes
+
+  // Allocate previous frame buffer once
+  if (prevFrame == nullptr) {
+    prevFrame = (uint8_t*)malloc(frameSize);
+    if (prevFrame != nullptr) {
+      memset(prevFrame, 0xFF, frameSize);  // assume white on first boot
+    }
+  }
 
   // Every 10th refresh, do a full clear to prevent DC bias / ghosting buildup
   if (forceFullRefresh || refreshCount >= 10) {
@@ -932,6 +942,10 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     EPD_Clear();
     forceFullRefresh = false;
     refreshCount = 0;
+    // After full clear, display is white
+    if (prevFrame != nullptr) {
+      memset(prevFrame, 0xFF, frameSize);
+    }
   }
 
   refreshCount++;
@@ -942,14 +956,20 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
   EPD_Full(WHITE);  // fills software buffer only
 
-  // Write white to OLD RAM (register 0x26) so the controller knows
-  // "current display state is white" — this avoids the visible white flash
-  // that EPD_Display_Part would otherwise need to sync old RAM
+  // Write previous frame to OLD RAM (register 0x26) so the controller
+  // knows exactly what's currently on the physical display
   EPD_Address_Set(0, 0, EPD_W - 1, EPD_H - 1);
   EPD_SetCursor(0, 0);
   EPD_WR_REG(0x26);
-  for (int i = 0; i < (EPD_W / 8) * EPD_H; i++) {
-    EPD_WR_DATA8(0xFF);
+  if (prevFrame != nullptr) {
+    for (int i = 0; i < frameSize; i++) {
+      EPD_WR_DATA8(prevFrame[i]);
+    }
+  } else {
+    // Fallback: assume white
+    for (int i = 0; i < frameSize; i++) {
+      EPD_WR_DATA8(0xFF);
+    }
   }
 
   int midX = EPD_W / 2;
@@ -1086,8 +1106,13 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   }
 
   // Push composed buffer to display using partial update (Mode 2)
-  // Only pixels that differ from old RAM (white) will be driven
+  // Only pixels that differ from old RAM (previous frame) will be driven
   EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+
+  // Save current frame as previous for next update
+  if (prevFrame != nullptr) {
+    memcpy(prevFrame, ImageBW, frameSize);
+  }
 }
 
 #endif
