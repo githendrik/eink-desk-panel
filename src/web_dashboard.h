@@ -80,6 +80,7 @@ input{width:100%;padding:8px;margin-top:2px;border:1px solid #ccc;border-radius:
 <button class="btn btn-save" onclick="save()">Save Settings</button>
 <button class="btn btn-status" onclick="status()">Status</button>
 <button class="btn btn-save" onclick="checkUpdate()">Check for Updates</button>
+<button class="btn btn-reset" onclick="reboot()">Reboot</button>
 <button class="btn btn-reset" onclick="reset()">Reset WiFi</button>
 </div>
 
@@ -118,6 +119,10 @@ function status(){
   fetch('/status').then(function(r){return r.json()}).then(function(j){
     box.innerHTML='<b>Firmware:</b> '+j.firmware+'<br><b>IP:</b> '+j.ip+'<br><b>WiFi:</b> '+j.ssid+' ('+j.rssi+' dBm)<br><b>Uptime:</b> '+j.uptime+'s<br><b>Free heap:</b> '+j.free_heap+' bytes';
   }).catch(function(){box.textContent='Error fetching status'});
+}
+function reboot(){
+  if(!confirm('Reboot the device?'))return;
+  fetch('/reboot',{method:'POST'}).then(function(){msg('Rebooting...',true)}).catch(function(){msg('Error',false)});
 }
 function reset(){
   if(!confirm('Reset WiFi credentials? Device will restart in AP mode.'))return;
@@ -263,6 +268,13 @@ void setupWebDashboard() {
     json += "\"d_loglevel\":" + String(config.remoteLogLevel);
     json += "}";
     request->send(200, "application/json", json);
+  });
+
+  // Reboot device
+  server.on("/reboot", HTTP_POST, [](AsyncWebServerRequest *request) {
+    request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Rebooting...\"}");
+    delay(500);
+    ESP.restart();
   });
 
   // Reset WiFi
