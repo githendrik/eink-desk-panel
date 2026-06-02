@@ -1062,7 +1062,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
       aareTextBuf[strlen(aareTextBuf) - 1] = '\0';
     }
     int aareTextWidth = EPD_GetUTF8TextWidth(aareTextBuf, 16);
-    EPD_ShowStringUTF8(midX - aareTextWidth / 2, 170, aareTextBuf, 16, BLACK);
+    EPD_ShowStringUTF8(midX - aareTextWidth / 2, 172, aareTextBuf, 16, BLACK);
   }
 
   // Bottom-left: Rain status > UV warning (>=6) > Pollen (priority order)
