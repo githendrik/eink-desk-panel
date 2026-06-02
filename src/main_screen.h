@@ -1074,7 +1074,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     EPD_ShowStringUTF8(leftCenter - rainWidth / 2, bottomY, buffer, 24, BLACK);
     
     memset(buffer, 0, sizeof(buffer));
-    snprintf(buffer, sizeof(buffer), "Weather");
+    snprintf(buffer, sizeof(buffer), "weather");
     int rainLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
     EPD_ShowStringUTF8(leftCenter - rainLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
   } else if (uvIndexMax >= 8) {
