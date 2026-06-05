@@ -18,82 +18,107 @@ This document provides context for AI agents working on this project.
 
 ## Critical Facts
 
-- **Display**: 400x300 pixels, e-ink (SSD1683), SPI
-- **Board**: Freenove ESP32-S3 WROOM (CrowPanel 4.2")
-- **Serial port**: `/dev/cu.usbserial-110` (can change to `-210` on replug)
-- **Upload command**: `~/.platformio/penv/bin/pio run -t upload` (plain `pio` not in PATH)
-- **Serial monitor**: `pio device monitor` broken; use Python `serial.Serial` instead
+- **Panels**: Two supported panels, built from one codebase
+  - 4.2" CrowPanel: 400x300, single SSD1683, rotation 0
+  - 5.79" CrowPanel: 792x272 (800x272 virtual), dual SSD1683 cascade, rotation 180
+- **Board**: Freenove ESP32-S3 WROOM (both panels)
+- **Build**: `~/.platformio/penv/bin/pio run -e panel-42` or `-e panel-579` (plain `pio` not in PATH)
+- **Serial ports**: Configured in platformio.ini per environment (typically `/dev/cu.usbserial-110` or `-1110`)
+- **Serial monitor**: `pio device monitor` broken in this environment; use Python `serial.Serial` instead
 - **User location**: Herrenschwanden, Switzerland (46.9725, 7.4528)
-- **WiFi SSID**: `Hello@richert.li`
+- **mDNS**: Configurable via web dashboard, defaults to `eink-panel.local`
+
+## Multi-Panel Architecture
+
+| Aspect | 4.2" Panel | 5.79" Panel |
+|--------|-----------|-------------|
+| Build env | `panel-42` | `panel-579` |
+| Build flag | (none) | `-DPANEL_579` |
+| Resolution | 400x300 | 800x272 virtual (792x272 visible) |
+| EPD Driver | `EPD_42.cpp` (row-major) | `EPD_579.cpp` (column-major cascade) |
+| Rotation | 0 | 180 |
+| Framebuffer | 15000 bytes (stack) | 27200 bytes (stack) + prevFrame in PSRAM |
+| Layout width | 400px | 396px (left half, right half currently blank) |
+| OTA asset | `firmware-42.bin` | `firmware-579.bin` |
+| PSRAM | not used | enabled (`-DBOARD_HAS_PSRAM`) |
+
+Key `#define` constants per panel (from `main_screen.h`):
+- `PANEL_ROTATION` — 0 or 180
+- `LAYOUT_W` — 400 or 396
+- `LAYOUT_H` — 300 or 272
+
+EPD_GUI `Paint_SetPixel` has a conditional 8-pixel gap offset at x=396 for the 5.79" IC junction (`#ifdef PANEL_579`).
+
+## 5.79" Panel: Right Half Status
+
+The right half (x=396..791, i.e. 396px wide) is currently **blank/white**. The user plans to add additional stats there. When implementing:
+- Content at logical x >= 396 will automatically cross the IC junction gap (handled by `Paint_SetPixel`)
+- The gap offset means logical x=396 maps to physical column 404 (8 invisible pixels in between)
+- Available space: 396x272 pixels
 
 ## File Map
 
 | File | Purpose |
 |------|---------|
 | `src/main.ino` | Entry point, WiFiManager setup, NTP, OTA boot check, rocker switch ISR, fetch/display loop |
-| `src/main_screen.h` | API fetch functions, data parsing, display rendering, OTA progress screen, AP mode screen |
-| `src/config_manager.h` | ConfigManager class: per-service NVS load/save/clear |
-| `src/web_dashboard.h` | AsyncWebServer dashboard HTML + endpoints (/, /save, /reset, /status, /check-update, /apply-update) |
-| `src/ota_update.h` | OTA check (GitHub API) + download + apply via Update library, progress callback |
+| `src/main_screen.h` | API fetch functions, data parsing, display rendering, per-panel layout (`LAYOUT_W`/`PANEL_ROTATION`) |
+| `src/config_manager.h` | ConfigManager class: per-service NVS load/save/clear (incl. mDNS hostname) |
+| `src/web_dashboard.h` | AsyncWebServer dashboard HTML + endpoints (/, /save, /reset, /status, /check-update, /apply-update, /reboot) |
+| `src/ota_update.h` | OTA check (GitHub API) + download + apply, per-panel asset matching (`OTA_ASSET_NAME`) |
+| `src/remote_log.h` | Discord webhook remote logging with configurable level |
 | `partitions.csv` | nvs 20KB + otadata 8KB + app0 2MB + app1 2MB |
-| `lib/EPD_GUI/EPD_GUI.cpp` | Font rendering with U8g2 integration, drawing primitives |
+| `lib/EPD/EPD.h` | Unified header: `#ifdef PANEL_579` sets resolution constants |
+| `lib/EPD/EPD_42.cpp` | 4.2" single-SSD1683 driver (guarded by `#ifndef PANEL_579`) |
+| `lib/EPD/EPD_579.cpp` | 5.79" dual-SSD1683 cascade driver (guarded by `#ifdef PANEL_579`) |
+| `lib/EPD_GUI/EPD_GUI.cpp` | Font rendering with U8g2 integration, drawing primitives, gap handling |
 | `lib/EPD_GUI/EPD_GUI.h` | GUI function declarations |
 | `lib/EPD_GUI/EPD_font.h` | Built-in bitmap fonts (max 48px) |
-| `lib/EPD/EPD.h` | Display driver (EPD_Init, EPD_Display_Part, etc.) |
-| `platformio.ini` | Board config, library deps, custom partitions, build flags |
-| `.github/workflows/build.yml` | CI: build on v* tag push, create release with .bin |
+| `lib/EPD_SPI/` | SPI bit-bang communication (shared, same pins both panels) |
+| `platformio.ini` | Two environments: `panel-42` and `panel-579`, shared `[env]` section |
+| `.github/workflows/build.yml` | CI: build both envs on v* tag push, create release with both .bin assets |
 
 ## Code Conventions
 
 - **Functions**: `snake_case` (e.g., `fetch_weather_data`, `display_main_screen`)
 - **Variables**: `camelCase` (e.g., `withingsAccessToken`, `bottomRightMode`)
-- **Constants**: `UPPER_CASE` (e.g., `EPD_W`, `WIFI_SSID`, `PRV_KEY`)
+- **Constants**: `UPPER_CASE` (e.g., `EPD_W`, `LAYOUT_W`, `PRV_KEY`)
+- **Panel conditionals**: `#ifdef PANEL_579` / `#else` / `#endif`
 - **HTTP pattern**: `WiFiClient`/`WiFiClientSecure` + `HTTPClient`, always call `http.end()`
 - **JSON parsing**: `Arduino_JSON` library, check `JSON.typeof()` before accessing
 - **Token storage**: NVS via `Preferences` library (wrapped by ConfigManager)
-- **NVS namespaces**: `wifi`, `withings`, `strava`, `firmware`
+- **NVS namespaces**: `wifi`, `withings`, `strava`, `google`, `firmware`, `misc`
 - **NVS key limit**: 15 chars max (e.g., `client_sec` not `client_secret`)
 
 ## Display Screens
 
-### Main Screen
+### Main Screen (both panels)
 ```
-EPD_W = 400, EPD_H = 300
+Layout constants:
+  midX = LAYOUT_W / 2
+  leftCenter = LAYOUT_W / 4 - 10
+  rightCenter = LAYOUT_W * 3 / 4
+  topHeight = EPD_H - 60
+  bottomY = topHeight + 5
 
-leftCenter  = midX/2 - 10  = 90   (left column center)
-rightCenter = midX + midX/2 - 10 = 290 (right column center)
-midX = 200
-
-Temperature Y: 30 (78px font, Logisoso numbers-only)
+Temperature: Y=20, 78px font (Logisoso numbers-only)
 Degree symbol: next to temp, 16px "o"
-Location labels ("Local"/"Aare"): Y=115, 16px
-AareGuru text: Y=170, 16px, centered at midX
-topHeight = EPD_H - 70 = 230
-bottomY = topHeight + 10 = 240
-Bottom values: 24px
-Bottom labels: Y = bottomY + 28, 12px
+Location labels ("Local"/"Aare"): Y=102, 16px
+AareGuru text: Y=152, 16px, centered at midX
+Bottom values: 24px at bottomY
+Bottom labels: Y = bottomY + 26, 12px
 ```
 
-### OTA Progress Screen (`display_ota_screen`)
-- Title "Updating Firmware" at Y=60, 24px
-- Version transition (e.g., "v0.2.6 -> v0.2.7") at Y=100, 16px
-- Progress bar: 280x30px centered at Y=150, outline + filled
-- Percentage at Y=200, 24px
-- "Do not power off!" warning at Y=250, 12px
-- Updated at 25% intervals via `otaSetProgressCallback`
+### AP Mode Screen
+- QR code (left side): WiFi format `WIFI:T:nopass;S:EinkPanel;;`, 4x scale, vertically centered
+- Text instructions (right side): title, SSID, IP, steps
+- Uses `ricmoo/QRCode` library
 
-### AP Mode Screen (`display_ap_screen`)
-- "WiFi Setup" title at Y=40, 24px
-- Step 1: "Connect to WiFi:" + SSID ("EinkPanel") at Y=90/115
-- Step 2: "Open browser:" + IP at Y=160/185
-- Step 3: "Select your WiFi network" at Y=230
-- Triggered by WiFiManager AP callback
+### Status Screen
+- Shows: WiFi SSID, IP, mDNS hostname, signal strength, firmware version, uptime
+- OTA section with state machine (0=idle, 1=checking, 2=available, 3=up to date)
 
-### Status Screen (`display_status_screen()`)
-- Shows: WiFi SSID, IP, signal strength (dBm + text), firmware version, uptime
-- OTA section: "Press OK to check" → "Checking..." → "Update available: vX.Y.Z / Press OK to install" or "Firmware is up to date"
-- MENU button or rocker to go back to main screen
-- OK button triggers OTA check; if update found, second OK press applies it
+### OTA Progress Screen
+- Title, version transition, progress bar (240px wide), percentage, warning text
 
 ## Buttons
 
@@ -110,28 +135,35 @@ All buttons: `INPUT_PULLUP`, ISR on `FALLING`, 200ms debounce.
 ## OTA Update System
 
 - GitHub releases API (public repo, no auth needed)
-- Check: boot + manual from dashboard `/check-update` + MENU button status screen (OK to check/apply)
-- `/check-update` uses deferred pattern: first call sets flag, main loop runs check, second call returns cached result (async handler can't do blocking HTTPS)
+- Each panel looks for its specific asset: `firmware-42.bin` or `firmware-579.bin` (defined as `OTA_ASSET_NAME`)
+- Check: boot + manual from dashboard `/check-update` + status screen (OK button)
+- `/check-update` uses deferred pattern: first call sets flag, main loop runs check, second call returns cached result
 - `/apply-update` sets `otaTriggered` flag, main loop applies
 - Progress callback updates e-ink at 25% intervals
 - Rollback: `esp_ota_mark_app_valid_cancel_rollback()` after WiFi + NTP succeed
 - `FIRMWARE_VERSION` must have `v` prefix to match GitHub tags
-- Version set via platformio.ini build flag: `-DFIRMWARE_VERSION='"v0.2.7"'`
-- CI `sed` injects version from git tag into platformio.ini
+- Version set via platformio.ini build flag: `-DFIRMWARE_VERSION='"v0.4.1"'`
+- CI `sed` injects version from git tag into platformio.ini (both environments)
 
-## Token Management Pattern
+## Remote Logging
 
-Both Withings and Strava use OAuth2 with **single-use refresh tokens**:
+- Discord webhook for remote diagnostics
+- Configurable log level: DEBUG(0), INFO(1), WARN(2), ERROR(3), OFF(4)
+- Configured via web dashboard, persisted in NVS (`misc` namespace, `webhook` + `log_level` keys)
+- Non-blocking, won't affect display refresh
 
-1. On boot: load tokens from NVS via ConfigManager
-2. On API call: if 401, refresh token and retry (max 1 retry)
-3. On successful refresh: save BOTH access_token AND refresh_token to NVS
-4. Withings token endpoint: `POST https://wbsapi.withings.net/v2/oauth2` with `action=requesttoken`
-   - NOT `oauth2.withings.com` (DNS fails on ESP32)
-   - Response wraps tokens in `body` object, check `status` field for errors
-5. Strava token endpoint: `POST https://www.strava.com/oauth/token`
-6. All HTTPS clients use `client.setInsecure()` and `http.setTimeout(10000)`
-7. All credentials managed via web dashboard at `http://eink-panel.local`
+## Configuration (NVS)
+
+All config managed via `ConfigManager` class and web dashboard:
+
+| Namespace | Keys | Notes |
+|-----------|------|-------|
+| `wifi` | `ssid`, `password` | Managed by WiFiManager |
+| `withings` | `client_id`, `client_sec`, `access_token`, `refresh_token`, `user_id` | OAuth2 single-use refresh |
+| `strava` | `client_id`, `client_sec`, `access_token`, `refresh_token` | OAuth2 single-use refresh |
+| `google` | `pollen_key` | API key |
+| `misc` | `webhook`, `log_level`, `mdns_host` | Discord, logging, mDNS |
+| `firmware` | `version` | Updated after OTA |
 
 ## Common Pitfalls
 
@@ -145,11 +177,15 @@ Both Withings and Strava use OAuth2 with **single-use refresh tokens**:
 8. ESPAsyncWebServer handlers must not do blocking HTTPS — defer to main loop via flags
 9. NVS keys max 15 chars — use abbreviations (e.g., `client_sec`)
 10. `FIRMWARE_VERSION` must include `v` prefix to match GitHub tag names
+11. 5.79" panel: data sent column-major to SSD1683 (not row-major like 4.2")
+12. 5.79" panel: 8-pixel gap at column 396 in framebuffer — `Paint_SetPixel` handles it
+13. 5.79" panel: old-data RAM (0x26/0xA6) must be set to 0x00 (black) for update waveform to work
+14. Both panels share same SPI pins — only the driver init sequence and data ordering differ
 
 ## Debugging
 
-- Serial output only available at boot (no real-time monitor working)
-- Reset device via DTR toggle for serial capture: `s.setDTR(False); sleep(0.1); s.setDTR(True)`
-- Or use Python: `serial.Serial('/dev/cu.usbserial-110', 115200, timeout=2)`
+- Serial output via Python: `serial.Serial('/dev/cu.usbserial-XXXX', 115200, timeout=2)`
+- Reset device via RTS toggle: `s.setRTS(True); sleep(0.1); s.setRTS(False)`
 - All API responses are printed to Serial for debugging
 - Web dashboard `/status` endpoint returns health JSON
+- Discord webhook for remote logging when device is deployed
