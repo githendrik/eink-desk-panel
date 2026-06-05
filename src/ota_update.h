@@ -16,6 +16,12 @@ extern ConfigManager config;
 #define OTA_GITHUB_OWNER "githendrik"
 #define OTA_GITHUB_REPO  "eink-desk-panel"
 
+#ifdef PANEL_579
+  #define OTA_ASSET_NAME "firmware-579.bin"
+#else
+  #define OTA_ASSET_NAME "firmware-42.bin"
+#endif
+
 struct OTAUpdateInfo {
   bool available;
   String version;
@@ -68,11 +74,11 @@ OTAUpdateInfo otaCheckForUpdate() {
     return info;
   }
 
-  // Find .bin asset
+  // Find panel-specific .bin asset
   JSONVar assets = release["assets"];
   for (int i = 0; i < assets.length(); i++) {
     String name = (const char*)assets[i]["name"];
-    if (name.endsWith(".bin")) {
+    if (name == OTA_ASSET_NAME) {
       info.available = true;
       info.version = tagName;
       info.binUrl = (const char*)assets[i]["browser_download_url"];
@@ -83,7 +89,7 @@ OTAUpdateInfo otaCheckForUpdate() {
   }
 
   if (!info.available) {
-    Serial.println("OTA: No .bin asset found in release");
+    Serial.printf("OTA: No asset named '%s' found in release\n", OTA_ASSET_NAME);
   }
 
   return info;

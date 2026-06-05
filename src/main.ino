@@ -134,13 +134,7 @@ void setup() {
   esp_ota_mark_app_valid_cancel_rollback();
   Serial.println("App marked as valid (rollback cancelled)");
 
-  // OTA boot check
-#ifdef PANEL_579
-  // Disabled on 5.79" branch (separate release track not yet set up)
-  otaSetProgressCallback([](int percent) {
-    display_ota_screen(ImageBW, lastUpdateInfo.version.c_str(), percent);
-  });
-#else
+  // OTA boot check (each panel looks for its own asset: firmware-42.bin or firmware-579.bin)
   Serial.println("Checking for OTA update...");
   otaSetProgressCallback([](int percent) {
     display_ota_screen(ImageBW, lastUpdateInfo.version.c_str(), percent);
@@ -154,7 +148,6 @@ void setup() {
       ESP.restart();
     }
   }
-#endif
 
   fetch_weather_data();
   fetch_weight_data(httpResponseCode);
