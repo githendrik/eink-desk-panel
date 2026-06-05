@@ -1116,16 +1116,16 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "%s", aareTemp.c_str());
   int aareWidth = EPD_GetUTF8TextWidth(buffer, tempFontSize);
-  EPD_ShowStringUTF8(rightCenter - aareWidth / 2, 30, buffer, tempFontSize, BLACK);
+  EPD_ShowStringUTF8(rightCenter - aareWidth / 2, 20, buffer, tempFontSize, BLACK);
   
   // Draw degree symbol smaller next to temperature
   degX = rightCenter + aareWidth / 2 + 2;
-  EPD_ShowStringUTF8(degX, 30, "o", 16, BLACK);
+  EPD_ShowStringUTF8(degX, 20, "o", 16, BLACK);
   
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "Aare");
   labelWidth = EPD_GetUTF8TextWidth(buffer, 16);
-  EPD_ShowStringUTF8(rightCenter - labelWidth / 2, 112, buffer, 16, BLACK);
+  EPD_ShowStringUTF8(rightCenter - labelWidth / 2, 102, buffer, 16, BLACK);
 
   // Middle: AareGuru text or staleness warning, centered in left half
   String staleMsg = getStalenessMessage();
@@ -1148,7 +1148,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
       aareTextBuf[strlen(aareTextBuf) - 1] = '\0';
     }
     int aareTextWidth = EPD_GetUTF8TextWidth(aareTextBuf, 16);
-    EPD_ShowStringUTF8(midX - aareTextWidth / 2, 152, aareTextBuf, 16, BLACK);
+    EPD_ShowStringUTF8(midX - aareTextWidth / 2, 162, aareTextBuf, 16, BLACK);
   }
 
   // Bottom-left: Rain status > UV warning (>=6) > Pollen (priority order)
