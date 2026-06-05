@@ -1,3 +1,4 @@
+#ifdef PANEL_579
 #include "EPD.h"
 
 // ============================================================
@@ -423,3 +424,5 @@ void EPD_Display_Part(uint16_t x, uint16_t y, uint16_t sizex, uint16_t sizey, co
 
   EPD_Update_Part();
 }
+
+#endif // PANEL_579

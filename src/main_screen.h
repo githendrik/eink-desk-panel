@@ -11,6 +11,19 @@
 #include "config_manager.h"
 #include "qrcode.h"
 
+// Panel-specific layout constants
+#ifdef PANEL_579
+  #define PANEL_ROTATION  180
+  #define LAYOUT_W        396   // visible left-half width
+  #define LAYOUT_H        272
+  #define MDNS_HOSTNAME   "eink-panel-579"
+#else
+  #define PANEL_ROTATION  0
+  #define LAYOUT_W        400
+  #define LAYOUT_H        300
+  #define MDNS_HOSTNAME   "eink-panel"
+#endif
+
 extern ConfigManager config;
 
 String temperature;
@@ -731,12 +744,10 @@ void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersio
   EPD_Init();
   EPD_Clear();
   EPD_Init_Fast(Fast_Seconds_1_5s);
-  Paint_NewImage(ImageBW, EPD_W, EPD_H, 180, WHITE);
+  Paint_NewImage(ImageBW, EPD_W, EPD_H, PANEL_ROTATION, WHITE);
   EPD_Full(WHITE);
 
-  // Use left half for status (same as main screen)
-  int halfW = 396;
-  int midX = halfW / 2;
+  int midX = LAYOUT_W / 2;
   int y = 15;
 
   // Title
@@ -746,7 +757,7 @@ void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersio
   y += 35;
 
   // Horizontal line
-  EPD_DrawLine(20, y, halfW - 20, y, BLACK);
+  EPD_DrawLine(20, y, LAYOUT_W - 20, y, BLACK);
   y += 12;
 
   // WiFi SSID
@@ -794,7 +805,7 @@ void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersio
   y += 30;
 
   // Horizontal line
-  EPD_DrawLine(20, y, halfW - 20, y, BLACK);
+  EPD_DrawLine(20, y, LAYOUT_W - 20, y, BLACK);
   y += 12;
 
   // OTA section
@@ -834,8 +845,7 @@ void display_ota_screen(uint8_t* ImageBW, const char* version, int percent) {
   static bool otaScreenInitialized = false;
   char buffer[64];
 
-  int halfW = 396;
-  int midX = halfW / 2;
+  int midX = LAYOUT_W / 2;
   int barX = midX - 120;
   int barY = 130;
   int barW = 240;
@@ -846,7 +856,7 @@ void display_ota_screen(uint8_t* ImageBW, const char* version, int percent) {
     EPD_Init();
     EPD_Clear();
     EPD_Init_Fast(Fast_Seconds_1_5s);
-    Paint_NewImage(ImageBW, EPD_W, EPD_H, 180, WHITE);
+    Paint_NewImage(ImageBW, EPD_W, EPD_H, PANEL_ROTATION, WHITE);
     EPD_Full(WHITE);
 
     // Title
@@ -911,10 +921,8 @@ void display_ap_screen(uint8_t* ImageBW, const char* ssid, const char* ip) {
   EPD_Init();
   EPD_Clear();
   EPD_Init_Fast(Fast_Seconds_1_5s);
-  Paint_NewImage(ImageBW, EPD_W, EPD_H, 180, WHITE);
+  Paint_NewImage(ImageBW, EPD_W, EPD_H, PANEL_ROTATION, WHITE);
   EPD_Full(WHITE);
-
-  int halfW = 396;
 
   // Generate WiFi QR code: WIFI:T:nopass;S:<SSID>;;
   char qrData[128];
@@ -949,7 +957,7 @@ void display_ap_screen(uint8_t* ImageBW, const char* ssid, const char* ip) {
 
   // Text instructions on the right side of left half
   int textX = qrX + qrPixels + 20;  // after QR + margin
-  int textW = halfW - textX - 10;
+  int textW = LAYOUT_W - textX - 10;
   int textMidX = textX + textW / 2;
   int y = 30;
 
@@ -992,11 +1000,15 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   static char buffer[64];
   static int refreshCount = 0;
   static uint8_t* prevFrame = nullptr;
-  const int frameSize = (EPD_W / 8) * EPD_H;  // 27200 bytes
+  const int frameSize = EPD_BUF_SIZE;
 
   // Allocate previous frame buffer once
   if (prevFrame == nullptr) {
+#ifdef PANEL_579
     prevFrame = (uint8_t*)ps_malloc(frameSize);
+#else
+    prevFrame = (uint8_t*)malloc(frameSize);
+#endif
     if (prevFrame != nullptr) {
       memset(prevFrame, 0xFF, frameSize);  // assume white on first boot
     }
@@ -1008,7 +1020,6 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     EPD_Clear();
     forceFullRefresh = false;
     refreshCount = 0;
-    // After full clear, display is white
     if (prevFrame != nullptr) {
       memset(prevFrame, 0xFF, frameSize);
     }
@@ -1019,11 +1030,12 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   EPD_Init_Fast(Fast_Seconds_1_5s);
   
   // Prepare buffer in RAM (no visible flash)
-  Paint_NewImage(ImageBW, EPD_W, EPD_H, 180, WHITE);
+  Paint_NewImage(ImageBW, EPD_W, EPD_H, PANEL_ROTATION, WHITE);
   EPD_Full(WHITE);  // fills software buffer only
 
-  // Write previous frame to OLD RAM (register 0x26 + 0xA6) so the controller
+  // Write previous frame to OLD RAM so the controller
   // knows exactly what's currently on the physical display
+#ifdef PANEL_579
   EPD_SetRAMMP();
   EPD_SetRAMMA();
   EPD_WR_REG(0x26);
@@ -1044,7 +1056,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   EPD_SetRAMSA();
   EPD_WR_REG(0xA6);
   if (prevFrame != nullptr) {
-    uint32_t tempcol = SOURCE_BYTES;  // start at column 50
+    uint32_t tempcol = SOURCE_BYTES;
     uint32_t templine = 0;
     const uint16_t rowBytes = SOURCE_BYTES * 2;
     for (uint32_t i = 0; i < IC_BYTES; i++) {
@@ -1055,21 +1067,31 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   } else {
     for (uint32_t i = 0; i < IC_BYTES; i++) EPD_WR_DATA8(0xFF);
   }
+#else
+  EPD_Address_Set(0, 0, EPD_W - 1, EPD_H - 1);
+  EPD_SetCursor(0, 0);
+  EPD_WR_REG(0x26);
+  if (prevFrame != nullptr) {
+    for (int i = 0; i < frameSize; i++) {
+      EPD_WR_DATA8(prevFrame[i]);
+    }
+  } else {
+    for (int i = 0; i < frameSize; i++) {
+      EPD_WR_DATA8(0xFF);
+    }
+  }
+#endif
 
-  // ---- Layout for left half (396x272 visible area) ----
-  // With rotation 180, logical x=0..395 maps to the right physical half,
-  // and x=396..791 maps to the left physical half.
-  // We draw in x=0..395 which appears on the visible left after rotation.
-  int halfW = 396;  // left half visible width
-  int midX = halfW / 2;    // center of left half = 198
-  int topHeight = EPD_H - 60;  // Give temps ~78% of height
+  // ---- Layout ----
+  int midX = LAYOUT_W / 2;
+  int topHeight = EPD_H - 60;
 
   // Font size for temperatures (78px Logisoso - numbers only)
   int tempFontSize = 78;
 
   // Center points for left and right columns within the left half
-  int leftCenter = halfW / 4 - 10;
-  int rightCenter = halfW * 3 / 4;
+  int leftCenter = LAYOUT_W / 4 - 10;
+  int rightCenter = LAYOUT_W * 3 / 4;
 
   // Top-left: Bern Temperature
   memset(buffer, 0, sizeof(buffer));
@@ -1117,7 +1139,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   }
 
   if (middleText != nullptr) {
-    int maxWidth = halfW - 20;
+    int maxWidth = LAYOUT_W - 20;
     while (strlen(aareTextBuf) > 0 && EPD_GetUTF8TextWidth(aareTextBuf, 16) > maxWidth) {
       aareTextBuf[strlen(aareTextBuf) - 1] = '\0';
     }

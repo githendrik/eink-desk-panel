@@ -75,23 +75,30 @@ void Paint_SetPixel(uint16_t Xpoint, uint16_t Ypoint, uint16_t Color)
   uint8_t Rdata;
   switch (Paint.Rotate) {
     case 0:
-      // 8-pixel gap at IC junction (column 396-403 in framebuffer)
+#ifdef PANEL_579
       if (Xpoint >= 396) { Xpoint += 8; }
+#endif
       X = Xpoint;
       Y = Ypoint;
       break;
     case 90:
+#ifdef PANEL_579
       if (Ypoint >= 396) { Ypoint += 8; }
+#endif
       X = Paint.WidthMemory - Ypoint - 1;
       Y = Xpoint;
       break;
     case 180:
+#ifdef PANEL_579
       if (Xpoint >= 396) { Xpoint += 8; }
+#endif
       X = Paint.WidthMemory - Xpoint - 1;
       Y = Paint.HeightMemory - Ypoint - 1;
       break;
     case 270:
+#ifdef PANEL_579
       if (Ypoint >= 396) { Ypoint += 8; }
+#endif
       X = Ypoint;
       Y = Paint.HeightMemory - Xpoint - 1;
       break;

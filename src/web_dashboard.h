@@ -315,9 +315,11 @@ void setupWebDashboard() {
   Serial.println("Web dashboard started on port 80");
 
   // mDNS
-  if (MDNS.begin("eink-panel-579")) {
+  if (MDNS.begin(MDNS_HOSTNAME)) {
     MDNS.addService("http", "tcp", 80);
-    Serial.println("mDNS: http://eink-panel-579.local");
+    Serial.print("mDNS: http://");
+    Serial.print(MDNS_HOSTNAME);
+    Serial.println(".local");
   }
 }
 
