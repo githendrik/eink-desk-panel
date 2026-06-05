@@ -31,8 +31,9 @@ public:
   // Misc
   String discordWebhookUrl;
   int remoteLogLevel;  // 0=DEBUG, 1=INFO, 2=WARN, 3=ERROR, 4=OFF
+  String mdnsHostname;  // mDNS hostname (without .local)
 
-  ConfigManager() : firmwareVersion("0.0.0"), remoteLogLevel(3) {}  // Default: ERROR only
+  ConfigManager() : firmwareVersion("0.0.0"), remoteLogLevel(3), mdnsHostname("eink-panel") {}  // Default: ERROR only, hostname eink-panel
 
   // Load all config from NVS
   void loadAll() {
@@ -65,6 +66,7 @@ public:
     prefs.begin("misc", true);
     discordWebhookUrl = prefs.getString("webhook", "");
     remoteLogLevel = prefs.getInt("log_level", 3);  // Default: ERROR
+    mdnsHostname = prefs.getString("mdns_host", "eink-panel");
     prefs.end();
 
     prefs.begin("firmware", true);
@@ -125,6 +127,7 @@ public:
     prefs.begin("misc", false);
     prefs.putString("webhook", discordWebhookUrl);
     prefs.putInt("log_level", remoteLogLevel);
+    prefs.putString("mdns_host", mdnsHostname);
     prefs.end();
   }
 

@@ -16,12 +16,10 @@
   #define PANEL_ROTATION  180
   #define LAYOUT_W        396   // visible left-half width
   #define LAYOUT_H        272
-  #define MDNS_HOSTNAME   "eink-panel-579"
 #else
   #define PANEL_ROTATION  0
   #define LAYOUT_W        400
   #define LAYOUT_H        300
-  #define MDNS_HOSTNAME   "eink-panel"
 #endif
 
 extern ConfigManager config;
@@ -769,6 +767,12 @@ void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersio
   // IP
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "IP: %s", WiFi.localIP().toString().c_str());
+  EPD_ShowStringUTF8(20, y, buffer, 16, BLACK);
+  y += 22;
+
+  // mDNS hostname
+  memset(buffer, 0, sizeof(buffer));
+  snprintf(buffer, sizeof(buffer), "mDNS: %s.local", config.mdnsHostname.c_str());
   EPD_ShowStringUTF8(20, y, buffer, 16, BLACK);
   y += 22;
 

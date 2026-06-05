@@ -76,6 +76,10 @@ input{width:100%;padding:8px;margin-top:2px;border:1px solid #ccc;border-radius:
 </select>
 </label>
 
+<h2>Network</h2>
+<label>mDNS Hostname<input type="text" id="mdns_host" placeholder="eink-panel"></label>
+<small style="color:#888">.local will be appended automatically. Reboot required after change.</small>
+
 <div style="margin-top:16px">
 <button class="btn btn-save" onclick="save()">Save Settings</button>
 <button class="btn btn-status" onclick="status()">Status</button>
@@ -106,7 +110,8 @@ function save(){
     s_rt:document.getElementById('s_rt').value,
     g_pollen:document.getElementById('g_pollen').value,
     d_webhook:document.getElementById('d_webhook').value,
-    d_loglevel:parseInt(document.getElementById('d_loglevel').value)
+    d_loglevel:parseInt(document.getElementById('d_loglevel').value),
+    mdns_host:document.getElementById('mdns_host').value
   };
   fetch('/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
   .then(function(r){return r.json()})
@@ -165,6 +170,7 @@ fetch('/status').then(function(r){return r.json()}).then(function(j){
   if(j.g_pollen)document.getElementById('g_pollen').value=j.g_pollen;
   if(j.d_webhook)document.getElementById('d_webhook').value=j.d_webhook;
   if(j.d_loglevel!==undefined)document.getElementById('d_loglevel').value=j.d_loglevel;
+  if(j.mdns_host)document.getElementById('mdns_host').value=j.mdns_host;
 }).catch(function(){});
 </script>
 </body>
@@ -246,6 +252,12 @@ void setupWebDashboard() {
       if (val >= 0 && val <= 4) config.remoteLogLevel = val;
     }
 
+    // Network
+    if (JSON.typeof(obj["mdns_host"]) != "undefined") {
+      String val = (const char*)obj["mdns_host"];
+      if (val.length() > 0) config.mdnsHostname = val;
+    }
+
     config.saveAll();
     request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Settings saved. Restart to apply.\"}");
   });
@@ -265,7 +277,8 @@ void setupWebDashboard() {
     json += "\"s_cid\":\"" + config.stravaClientId + "\",";
     json += "\"g_pollen\":\"" + config.googlePollenApiKey + "\",";
     json += "\"d_webhook\":\"" + config.discordWebhookUrl + "\",";
-    json += "\"d_loglevel\":" + String(config.remoteLogLevel);
+    json += "\"d_loglevel\":" + String(config.remoteLogLevel) + ",";
+    json += "\"mdns_host\":\"" + config.mdnsHostname + "\"";
     json += "}";
     request->send(200, "application/json", json);
   });
@@ -314,11 +327,12 @@ void setupWebDashboard() {
   server.begin();
   Serial.println("Web dashboard started on port 80");
 
-  // mDNS
-  if (MDNS.begin(MDNS_HOSTNAME)) {
+  // mDNS - use configured hostname with fallback
+  const char* hostname = config.mdnsHostname.length() > 0 ? config.mdnsHostname.c_str() : "eink-panel";
+  if (MDNS.begin(hostname)) {
     MDNS.addService("http", "tcp", 80);
     Serial.print("mDNS: http://");
-    Serial.print(MDNS_HOSTNAME);
+    Serial.print(hostname);
     Serial.println(".local");
   }
 }
