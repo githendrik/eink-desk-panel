@@ -81,6 +81,8 @@ See [Getting Started](docs/getting-started.md) for full setup instructions.
 
 Access at `http://<hostname>.local` (default: `http://eink-panel.local`). Features:
 
+![Web Dashboard](docs/web-dashboard.png)
+
 - Configure Withings/Strava/Google API tokens
 - Set custom mDNS hostname
 - Configure remote logging (Discord webhook + log level)
