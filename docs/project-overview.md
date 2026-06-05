@@ -2,15 +2,35 @@
 
 ## Project Description
 
-A single-screen ESP32-S3 e-ink desk panel displaying weather, river temperature, pollen/rain/UV, weight, and Strava activity data. Temperatures are the dominant visual element using large 78px fonts.
+A multi-panel ESP32-S3 e-ink desk panel displaying weather, river temperature, pollen/rain/UV, weight, and Strava activity data. Temperatures are the dominant visual element using large 78px fonts. Supports both 4.2" (400x300) and 5.79" (792x272) CrowPanel displays from a single codebase.
 
 ## Hardware
 
-- **Board**: Freenove ESP32-S3 WROOM (CrowPanel 4.2" e-ink)
-- **Display**: 400x300 E-Paper (E-Ink) via SPI
-- **Input**: Rocker switch (GPIO 6 = previous, GPIO 4 = next), MENU (GPIO 1), OK (GPIO 5)
-- **Connection**: USB serial (`/dev/cu.usbserial-110`) at 115200 baud
-- **Upload speed**: 460800 baud
+| Spec | 4.2" Panel | 5.79" Panel |
+|------|-----------|-------------|
+| **Board** | ESP32-S3 WROOM | ESP32-S3 WROOM-1-N8R8 |
+| **Display** | 400x300 (single SSD1683) | 792x272 (dual SSD1683 cascade) |
+| **PSRAM** | — | 8MB |
+| **Input** | Rocker, MENU, OK, HOME | Rocker, MENU, Back, Reset, Boot |
+| **SPI pins** | SCK=12, MOSI=11, RES=47, DC=46, CS=45, BUSY=48 | Same |
+| **Connection** | USB serial at 115200 baud | Same |
+
+## Multi-Panel Architecture
+
+The codebase uses compile-time `#ifdef PANEL_579` to select between panels:
+
+- **EPD Driver**: `EPD_42.cpp` (single IC, row-major) vs `EPD_579.cpp` (dual IC, column-major cascade)
+- **EPD_GUI**: Shared, with conditional 8-pixel gap handling for the 5.79" IC junction
+- **Layout**: `LAYOUT_W` / `LAYOUT_H` / `PANEL_ROTATION` constants per panel
+- **Framebuffer**: `EPD_BUF_SIZE` — 15000 bytes (4.2") or 27200 bytes (5.79")
+- **OTA**: Each panel pulls its own binary (`firmware-42.bin` or `firmware-579.bin`)
+
+PlatformIO environments:
+```bash
+pio run -e panel-42    # 4.2" panel
+pio run -e panel-579   # 5.79" panel
+pio run                # builds both
+```
 
 ## Display Layout
 
@@ -41,33 +61,41 @@ A single-screen ESP32-S3 e-ink desk panel displaying weather, river temperature,
 eink-desk-panel/
 ├── src/
 │   ├── main.ino              # Entry point, WiFi, NTP, fetch/display loop, rocker switch
-│   ├── main_screen.h         # All display + API fetch logic
+│   ├── main_screen.h         # All display + API fetch logic (per-panel layout)
 │   ├── config_manager.h      # ConfigManager class: per-service NVS load/save/clear
 │   ├── web_dashboard.h       # AsyncWebServer dashboard HTML + endpoints
-│   ├── ota_update.h          # OTA check + download + apply via Update library
+│   ├── ota_update.h          # OTA check + download + apply (per-panel asset matching)
+│   ├── remote_log.h          # Discord webhook remote logging
 │   ├── credentials.h         # API keys and tokens (gitignored)
 │   └── credentials.h.example # Template for credentials
 ├── lib/
 │   ├── EPD/                  # E-Paper Display driver
+│   │   ├── EPD.h             # Unified header (#ifdef PANEL_579 for constants)
+│   │   ├── EPD_42.cpp        # 4.2" single-SSD1683 driver
+│   │   └── EPD_579.cpp       # 5.79" dual-SSD1683 cascade driver
 │   ├── EPD_GUI/              # GUI utilities (fonts, shapes, text, U8g2 integration)
-│   └── EPD_SPI/              # SPI communication layer
+│   └── EPD_SPI/              # SPI communication layer (shared)
 ├── scripts/
 │   ├── get_withings_credentials.py  # OAuth2 flow for Withings
 │   ├── get_strava_credentials.py    # OAuth2 flow for Strava
 │   └── test_withings_api.py         # Debug script for Withings API
 ├── docs/                     # Documentation
-└── platformio.ini            # Build config
+├── .github/workflows/        # CI: builds both panels, creates release
+└── platformio.ini            # Build config (two environments: panel-42, panel-579)
 ```
 
 ### Key Components
 
-1. **EPD Driver** (`lib/EPD/`): Low-level e-paper display control (SSD1683)
-2. **EPD_GUI** (`lib/EPD_GUI/`): GUI functions with U8g2 font integration for large fonts
-3. **EPD_SPI** (`lib/EPD_SPI/`): SPI communication abstraction
-4. **Main Screen** (`src/main_screen.h`): All API fetching, data parsing, and display rendering
-5. **Config Manager** (`src/config_manager.h`): NVS-backed persistent configuration
-6. **Web Dashboard** (`src/web_dashboard.h`): Local web UI for token management and OTA
-7. **OTA Update** (`src/ota_update.h`): GitHub Releases-based firmware updates
+1. **EPD Driver** (`lib/EPD/`): Low-level e-paper display control (SSD1683). Two implementations selected at compile time:
+   - `EPD_42.cpp`: Single SSD1683, row-major data, 400x300
+   - `EPD_579.cpp`: Dual SSD1683 cascade, column-major data, 800x272 virtual (792x272 visible)
+2. **EPD_GUI** (`lib/EPD_GUI/`): GUI functions with U8g2 font integration for large fonts. Handles 8-pixel gap at IC junction for 5.79" panel.
+3. **EPD_SPI** (`lib/EPD_SPI/`): SPI communication abstraction (shared between panels)
+4. **Main Screen** (`src/main_screen.h`): All API fetching, data parsing, and display rendering. Uses `LAYOUT_W`/`LAYOUT_H`/`PANEL_ROTATION` for per-panel layout.
+5. **Config Manager** (`src/config_manager.h`): NVS-backed persistent configuration (API tokens, mDNS hostname, log level)
+6. **Web Dashboard** (`src/web_dashboard.h`): Local web UI for token management, mDNS config, logging, and OTA
+7. **OTA Update** (`src/ota_update.h`): GitHub Releases-based firmware updates (per-panel asset matching)
+8. **Remote Log** (`src/remote_log.h`): Optional Discord webhook logging with configurable level
 
 ## API Integrations
 
@@ -98,9 +126,10 @@ Both Withings and Strava use OAuth2 with single-use refresh tokens:
 
 - **Framework**: PlatformIO with Arduino framework
 - **Board config**: `freenove_esp32_s3_wroom`
-- **Libraries**: Adafruit GFX, U8g2, U8g2_for_Adafruit_GFX, Arduino_JSON, Preferences, ESPAsyncWebServer
-- **Upload**: `~/.platformio/penv/bin/pio run -t upload`
-- **Serial port**: `/dev/cu.usbserial-110` (may change on replug)
+- **Environments**: `panel-42` (4.2") and `panel-579` (5.79")
+- **Libraries**: Adafruit GFX, U8g2, U8g2_for_Adafruit_GFX, Arduino_JSON, Preferences, ESPAsyncWebServer, QRCode
+- **Upload**: `~/.platformio/penv/bin/pio run -e <env> -t upload`
+- **Serial ports**: Configured per environment in `platformio.ini`
 
 ## Font System
 

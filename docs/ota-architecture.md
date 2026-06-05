@@ -17,7 +17,7 @@ Implement a robust Over-The-Air (OTA) update mechanism and a dynamic configurati
 - **Status screen**: Dedicated MENU button (GPIO 1) toggles a status screen showing IP, firmware version, and future diagnostics. Separate from the rocker switch (GPIO 4/6) which toggles Weight/Strava on the main display.
 - **Screen model**: Three screens — main-weight (default), main-strava (rocker), status (MENU button).
 - **AP mode display**: E-ink shows AP SSID + `192.168.4.1` when in captive portal mode.
-- **mDNS**: Device accessible at `http://eink-panel.local` when connected to WiFi.
+- **mDNS**: Device accessible at configurable hostname (default `http://eink-panel.local`). Set via web dashboard, persisted in NVS.
 
 ## 3. Feature Requirements
 
@@ -109,7 +109,7 @@ Goal: Check for, download, and apply firmware updates from GitHub Releases.
 - **D1:** Define `CURRENT_FIRMWARE_VERSION` as a string baked into the build (via `platformio.ini` build flags or `#define`).
 - **D2:** On boot, query `https://api.github.com/repos/{owner}/{repo}/releases/latest` with `HTTPClient` + `WiFiClientSecure` (using Root CA bundle for cert validation).
 - **D3:** Parse the JSON response — extract `tag_name` and compare with `CURRENT_FIRMWARE_VERSION` (string inequality).
-- **D4:** If an update is found, resolve the `.bin` asset URL from `assets[].browser_download_url`.
+- **D4:** If an update is found, resolve the panel-specific `.bin` asset URL from `assets[].browser_download_url` (matching `firmware-42.bin` or `firmware-579.bin` based on build flag `OTA_ASSET_NAME`).
 - **D5:** Open the firmware `.bin` stream and feed it into the `Update` library (writing to the inactive OTA partition).
 - **D6:** Report download/verification progress back to a callback.
 - **D7:** Verify the update with MD5 (built into `Update`), then `Update.end()`.
@@ -143,8 +143,8 @@ Goal: Ensure the device can recover if the new firmware is broken.
 Goal: Automate building and publishing firmware.
 
 - **H1:** Create `.github/workflows/build.yml` that triggers on tag pushes (`v*`).
-- **H2:** Use `platformio` CLI in CI to compile the firmware for the target board.
-- **H3:** Create a GitHub Release automatically from the tag and attach the compiled `.bin` file.
+- **H2:** Use `platformio` CLI in CI to compile the firmware for both target panels (`panel-42` and `panel-579`).
+- **H3:** Create a GitHub Release automatically from the tag and attach both compiled binaries (`firmware-42.bin` and `firmware-579.bin`).
 - **H4:** Verify the OTA endpoint detects the newly published release.
 
 ---

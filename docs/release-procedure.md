@@ -1,6 +1,6 @@
 # Release Procedure
 
-Follow these steps to create a new firmware release. The CI pipeline will handle the rest.
+Follow these steps to create a new firmware release. The CI pipeline builds both panel firmwares and attaches them to the release.
 
 ## Prerequisites
 
@@ -26,13 +26,20 @@ vMAJOR.MINOR.PATCH
 
 ## Step 2: Update Version in platformio.ini
 
-Edit `platformio.ini` and update the build flag:
+Edit `platformio.ini` and update the build flag in **both** environments:
 
 ```ini
--D FIRMWARE_VERSION='"v0.2.8"'
-```
+[env:panel-42]
+build_flags = 
+	-DFIRMWARE_VERSION='"vX.Y.Z"'
+	...
 
-Replace with your next version number.
+[env:panel-579]
+build_flags = 
+	-DPANEL_579
+	-DFIRMWARE_VERSION='"vX.Y.Z"'
+	...
+```
 
 ## Step 3: Commit the Version Bump
 
@@ -73,17 +80,19 @@ gh release view vX.Y.Z --repo githendrik/eink-desk-panel
 
 Verify it contains:
 - Tag name matches version
-- Firmware binary: `firmware.bin`
+- Two firmware binaries: `firmware-42.bin` and `firmware-579.bin`
 - Auto-generated commit history
 
 ## Step 8: Test OTA Update (Optional but Recommended)
 
-1. Open device dashboard at `http://eink-panel.local`
+1. Open device dashboard at `http://eink-panel.local` (or your configured hostname)
 2. Click "Check for Updates"
 3. Verify new version `vX.Y.Z` appears
 4. Click "Update Now"
 5. Watch e-ink progress screen
 6. Verify device reboots and shows new version on status screen
+
+Each device will only download its own binary (`firmware-42.bin` or `firmware-579.bin`).
 
 ---
 
@@ -94,10 +103,10 @@ The GitHub Actions workflow (`.github/workflows/build.yml`) automatically:
 1. Triggers on `push` of tags matching `v*`
 2. Sets up ESP32 toolchain
 3. Installs PlatformIO and dependencies
-4. Injects version from git tag into `platformio.ini`
-5. Builds firmware
+4. Injects version from git tag into `platformio.ini` (both environments)
+5. Builds both `panel-42` and `panel-579` environments
 6. Creates GitHub release with tag
-7. Uploads `firmware.bin` as release asset
+7. Uploads `firmware-42.bin` and `firmware-579.bin` as release assets
 
 **No manual intervention needed** after pushing the tag.
 
@@ -118,6 +127,8 @@ If a release has issues:
 
 | Version | Date | Notes |
 |---------|------|-------|
+| v0.4.0 | 2026-06-05 | Multi-panel support (4.2" + 5.79"), configurable mDNS, Discord logging, QR WiFi setup |
+| v0.3.8 | 2026-06-01 | Remote logging, Discord webhook |
 | v0.2.7 | 2026-05-20 | Migrate to Open-Meteo, add UV index, 10-min refresh |
 | v0.2.6 | 2026-05-19 | Status screen with on-device OTA check |
 | v0.2.5 | 2026-05-19 | Fix post-OTA blank screen |
@@ -147,4 +158,11 @@ git tag -l
 
 # Delete local tag (if mistake before push)
 git tag -d vX.Y.Z
+
+# Build both panels locally
+pio run
+
+# Build specific panel
+pio run -e panel-42
+pio run -e panel-579
 ```
