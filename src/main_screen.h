@@ -9,6 +9,7 @@
 #include "EPD_GUI.h"
 #include "remote_log.h"
 #include "config_manager.h"
+#include "qrcode.h"
 
 extern ConfigManager config;
 
@@ -730,33 +731,35 @@ void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersio
   EPD_Init();
   EPD_Clear();
   EPD_Init_Fast(Fast_Seconds_1_5s);
-  Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
+  Paint_NewImage(ImageBW, EPD_W, EPD_H, 180, WHITE);
   EPD_Full(WHITE);
 
-  int midX = EPD_W / 2;
-  int y = 20;
+  // Use left half for status (same as main screen)
+  int halfW = 396;
+  int midX = halfW / 2;
+  int y = 15;
 
   // Title
   const char* title = "Device Status";
   int titleW = EPD_GetUTF8TextWidth(title, 24);
   EPD_ShowStringUTF8(midX - titleW / 2, y, title, 24, BLACK);
-  y += 40;
+  y += 35;
 
   // Horizontal line
-  EPD_DrawLine(20, y, EPD_W - 20, y, BLACK);
-  y += 15;
+  EPD_DrawLine(20, y, halfW - 20, y, BLACK);
+  y += 12;
 
   // WiFi SSID
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "WiFi: %s", WiFi.SSID().c_str());
   EPD_ShowStringUTF8(20, y, buffer, 16, BLACK);
-  y += 25;
+  y += 22;
 
   // IP
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "IP: %s", WiFi.localIP().toString().c_str());
   EPD_ShowStringUTF8(20, y, buffer, 16, BLACK);
-  y += 25;
+  y += 22;
 
   // Signal strength
   int rssi = WiFi.RSSI();
@@ -768,13 +771,13 @@ void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersio
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "Signal: %s (%ddBm)", sigText, rssi);
   EPD_ShowStringUTF8(20, y, buffer, 16, BLACK);
-  y += 25;
+  y += 22;
 
   // Firmware version
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "Firmware: %s", FIRMWARE_VERSION);
   EPD_ShowStringUTF8(20, y, buffer, 16, BLACK);
-  y += 25;
+  y += 22;
 
   // Uptime
   unsigned long uptimeSec = millis() / 1000;
@@ -788,11 +791,11 @@ void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersio
     snprintf(buffer, sizeof(buffer), "Uptime: %dh %dm", hours, mins);
   }
   EPD_ShowStringUTF8(20, y, buffer, 16, BLACK);
-  y += 35;
+  y += 30;
 
   // Horizontal line
-  EPD_DrawLine(20, y, EPD_W - 20, y, BLACK);
-  y += 15;
+  EPD_DrawLine(20, y, halfW - 20, y, BLACK);
+  y += 12;
 
   // OTA section
   if (otaState == 0) {
@@ -808,7 +811,7 @@ void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersio
     snprintf(buffer, sizeof(buffer), "Update available: %s", otaVersion);
     int msgW = EPD_GetUTF8TextWidth(buffer, 16);
     EPD_ShowStringUTF8(midX - msgW / 2, y, buffer, 16, BLACK);
-    y += 22;
+    y += 20;
     const char* hint2 = "Press OK to install";
     int h2W = EPD_GetUTF8TextWidth(hint2, 16);
     EPD_ShowStringUTF8(midX - h2W / 2, y, hint2, 16, BLACK);
@@ -821,7 +824,7 @@ void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersio
   // Footer
   const char* footer = "MENU to go back";
   int footW = EPD_GetUTF8TextWidth(footer, 12);
-  EPD_ShowStringUTF8(midX - footW / 2, EPD_H - 20, footer, 12, BLACK);
+  EPD_ShowStringUTF8(midX - footW / 2, EPD_H - 18, footer, 12, BLACK);
 
   EPD_Display_Fast(ImageBW);
 }
@@ -831,30 +834,31 @@ void display_ota_screen(uint8_t* ImageBW, const char* version, int percent) {
   static bool otaScreenInitialized = false;
   char buffer[64];
 
-  int midX = EPD_W / 2;
-  int barX = midX - 140;
-  int barY = 150;
-  int barW = 280;
-  int barH = 30;
+  int halfW = 396;
+  int midX = halfW / 2;
+  int barX = midX - 120;
+  int barY = 130;
+  int barW = 240;
+  int barH = 26;
 
   if (!otaScreenInitialized) {
     // First call: full clear and draw static elements
     EPD_Init();
     EPD_Clear();
     EPD_Init_Fast(Fast_Seconds_1_5s);
-    Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
+    Paint_NewImage(ImageBW, EPD_W, EPD_H, 180, WHITE);
     EPD_Full(WHITE);
 
     // Title
     const char* title = "Updating Firmware";
     int titleW = EPD_GetUTF8TextWidth(title, 24);
-    EPD_ShowStringUTF8(midX - titleW / 2, 60, title, 24, BLACK);
+    EPD_ShowStringUTF8(midX - titleW / 2, 50, title, 24, BLACK);
 
     // Version line
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s -> %s", FIRMWARE_VERSION, version);
     int verW = EPD_GetUTF8TextWidth(buffer, 16);
-    EPD_ShowStringUTF8(midX - verW / 2, 100, buffer, 16, BLACK);
+    EPD_ShowStringUTF8(midX - verW / 2, 90, buffer, 16, BLACK);
 
     // Progress bar outline
     EPD_DrawRectangle(barX, barY, barX + barW, barY + barH, BLACK, 0);
@@ -862,7 +866,7 @@ void display_ota_screen(uint8_t* ImageBW, const char* version, int percent) {
     // Warning
     const char* warn = "Do not power off!";
     int warnW = EPD_GetUTF8TextWidth(warn, 12);
-    EPD_ShowStringUTF8(midX - warnW / 2, 250, warn, 12, BLACK);
+    EPD_ShowStringUTF8(midX - warnW / 2, 230, warn, 12, BLACK);
 
     // Fill progress (if > 0 on first call)
     if (percent > 0) {
@@ -874,15 +878,14 @@ void display_ota_screen(uint8_t* ImageBW, const char* version, int percent) {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%d%%", percent);
     int pctW = EPD_GetUTF8TextWidth(buffer, 24);
-    EPD_ShowStringUTF8(midX - pctW / 2, 200, buffer, 24, BLACK);
+    EPD_ShowStringUTF8(midX - pctW / 2, 175, buffer, 24, BLACK);
 
     EPD_Display_Fast(ImageBW);
     otaScreenInitialized = true;
   } else {
     // Subsequent calls: only update progress bar fill and percentage
-    // Clear the progress bar interior and percentage area in buffer
     EPD_ClearWindows(barX + 2, barY + 2, barX + barW - 2, barY + barH - 2, WHITE);
-    EPD_ClearWindows(midX - 60, 200, midX + 60, 228, WHITE);  // percentage text area
+    EPD_ClearWindows(midX - 60, 175, midX + 60, 203, WHITE);
 
     // Redraw progress fill
     if (percent > 0) {
@@ -894,11 +897,10 @@ void display_ota_screen(uint8_t* ImageBW, const char* version, int percent) {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%d%%", percent);
     int pctW = EPD_GetUTF8TextWidth(buffer, 24);
-    EPD_ShowStringUTF8(midX - pctW / 2, 200, buffer, 24, BLACK);
+    EPD_ShowStringUTF8(midX - pctW / 2, 175, buffer, 24, BLACK);
 
-    // Partial update: only the progress bar + percentage region
-    // Use full-width partial to keep it simple (bar area y=150 to percentage y=228)
-    EPD_Display_Part(0, barY, EPD_W, 228 - barY, ImageBW + (barY * EPD_W / 8));
+    // Full partial update (dual-IC doesn't support windowed partial easily)
+    EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
   }
 }
 
@@ -909,41 +911,79 @@ void display_ap_screen(uint8_t* ImageBW, const char* ssid, const char* ip) {
   EPD_Init();
   EPD_Clear();
   EPD_Init_Fast(Fast_Seconds_1_5s);
-  Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
+  Paint_NewImage(ImageBW, EPD_W, EPD_H, 180, WHITE);
   EPD_Full(WHITE);
-  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
 
-  int midX = EPD_W / 2;
+  int halfW = 396;
+
+  // Generate WiFi QR code: WIFI:T:nopass;S:<SSID>;;
+  char qrData[128];
+  snprintf(qrData, sizeof(qrData), "WIFI:T:nopass;S:%s;;", ssid);
+
+  QRCode qrcode;
+  uint8_t qrcodeData[qrcode_getBufferSize(3)];
+  qrcode_initText(&qrcode, qrcodeData, 3, ECC_LOW, qrData);
+
+  // Render QR code on the left portion
+  // QR version 3 = 29x29 modules. Scale to fit nicely in ~140px
+  int qrSize = qrcode.size;  // 29
+  int scale = 4;             // 29*4 = 116px
+  int qrPixels = qrSize * scale;
+  int qrX = 20;             // left margin
+  int qrY = (EPD_H - qrPixels) / 2;  // vertically centered
+
+  // Draw QR with quiet zone (white border already from EPD_Full)
+  for (int y = 0; y < qrSize; y++) {
+    for (int x = 0; x < qrSize; x++) {
+      if (qrcode_getModule(&qrcode, x, y)) {
+        // Draw a scale x scale black square
+        EPD_DrawRectangle(
+          qrX + x * scale,
+          qrY + y * scale,
+          qrX + x * scale + scale,
+          qrY + y * scale + scale,
+          BLACK, 1);
+      }
+    }
+  }
+
+  // Text instructions on the right side of left half
+  int textX = qrX + qrPixels + 20;  // after QR + margin
+  int textW = halfW - textX - 10;
+  int textMidX = textX + textW / 2;
+  int y = 30;
 
   // Title
   const char* title = "WiFi Setup";
   int titleW = EPD_GetUTF8TextWidth(title, 24);
-  EPD_ShowStringUTF8(midX - titleW / 2, 40, title, 24, BLACK);
+  EPD_ShowStringUTF8(textMidX - titleW / 2, y, title, 24, BLACK);
+  y += 40;
 
   // Step 1
-  const char* step1 = "1. Connect to WiFi:";
-  int s1W = EPD_GetUTF8TextWidth(step1, 16);
-  EPD_ShowStringUTF8(midX - s1W / 2, 90, step1, 16, BLACK);
+  const char* step1 = "1. Scan QR or join:";
+  EPD_ShowStringUTF8(textX, y, step1, 16, BLACK);
+  y += 22;
 
-  // SSID (large)
+  // SSID
   int ssidW = EPD_GetUTF8TextWidth(ssid, 24);
-  EPD_ShowStringUTF8(midX - ssidW / 2, 115, ssid, 24, BLACK);
+  EPD_ShowStringUTF8(textMidX - ssidW / 2, y, ssid, 24, BLACK);
+  y += 38;
 
   // Step 2
   const char* step2 = "2. Open browser:";
-  int s2W = EPD_GetUTF8TextWidth(step2, 16);
-  EPD_ShowStringUTF8(midX - s2W / 2, 160, step2, 16, BLACK);
+  EPD_ShowStringUTF8(textX, y, step2, 16, BLACK);
+  y += 22;
 
-  // IP (large)
+  // IP
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "http://%s", ip);
-  int ipW = EPD_GetUTF8TextWidth(buffer, 24);
-  EPD_ShowStringUTF8(midX - ipW / 2, 185, buffer, 24, BLACK);
+  int ipW = EPD_GetUTF8TextWidth(buffer, 16);
+  EPD_ShowStringUTF8(textMidX - ipW / 2, y, buffer, 16, BLACK);
+  y += 32;
 
   // Step 3
-  const char* step3 = "3. Select your WiFi network";
-  int s3W = EPD_GetUTF8TextWidth(step3, 16);
-  EPD_ShowStringUTF8(midX - s3W / 2, 230, step3, 16, BLACK);
+  const char* step3 = "3. Select WiFi";
+  EPD_ShowStringUTF8(textX, y, step3, 16, BLACK);
 
   EPD_Display_Fast(ImageBW);
 }
@@ -952,11 +992,11 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   static char buffer[64];
   static int refreshCount = 0;
   static uint8_t* prevFrame = nullptr;
-  const int frameSize = (EPD_W / 8) * EPD_H;  // 15000 bytes
+  const int frameSize = (EPD_W / 8) * EPD_H;  // 27200 bytes
 
   // Allocate previous frame buffer once
   if (prevFrame == nullptr) {
-    prevFrame = (uint8_t*)malloc(frameSize);
+    prevFrame = (uint8_t*)ps_malloc(frameSize);
     if (prevFrame != nullptr) {
       memset(prevFrame, 0xFF, frameSize);  // assume white on first boot
     }
@@ -979,72 +1019,94 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   EPD_Init_Fast(Fast_Seconds_1_5s);
   
   // Prepare buffer in RAM (no visible flash)
-  Paint_NewImage(ImageBW, EPD_W, EPD_H, 0, WHITE);
+  Paint_NewImage(ImageBW, EPD_W, EPD_H, 180, WHITE);
   EPD_Full(WHITE);  // fills software buffer only
 
-  // Write previous frame to OLD RAM (register 0x26) so the controller
+  // Write previous frame to OLD RAM (register 0x26 + 0xA6) so the controller
   // knows exactly what's currently on the physical display
-  EPD_Address_Set(0, 0, EPD_W - 1, EPD_H - 1);
-  EPD_SetCursor(0, 0);
+  EPD_SetRAMMP();
+  EPD_SetRAMMA();
   EPD_WR_REG(0x26);
   if (prevFrame != nullptr) {
-    for (int i = 0; i < frameSize; i++) {
-      EPD_WR_DATA8(prevFrame[i]);
+    uint32_t tempcol = 0;
+    uint32_t templine = 0;
+    const uint16_t rowBytes = SOURCE_BYTES * 2;
+    for (uint32_t i = 0; i < IC_BYTES; i++) {
+      EPD_WR_DATA8(*(prevFrame + templine * rowBytes + tempcol));
+      templine++;
+      if (templine >= GATE_BITS) { tempcol++; templine = 0; }
     }
   } else {
-    // Fallback: assume white
-    for (int i = 0; i < frameSize; i++) {
-      EPD_WR_DATA8(0xFF);
-    }
+    for (uint32_t i = 0; i < IC_BYTES; i++) EPD_WR_DATA8(0xFF);
   }
 
-  int midX = EPD_W / 2;
-  int topHeight = EPD_H - 70;  // Give temps 70%+ of screen
+  EPD_SetRAMSP();
+  EPD_SetRAMSA();
+  EPD_WR_REG(0xA6);
+  if (prevFrame != nullptr) {
+    uint32_t tempcol = SOURCE_BYTES;  // start at column 50
+    uint32_t templine = 0;
+    const uint16_t rowBytes = SOURCE_BYTES * 2;
+    for (uint32_t i = 0; i < IC_BYTES; i++) {
+      EPD_WR_DATA8(*(prevFrame + templine * rowBytes + tempcol));
+      templine++;
+      if (templine >= GATE_BITS) { tempcol++; templine = 0; }
+    }
+  } else {
+    for (uint32_t i = 0; i < IC_BYTES; i++) EPD_WR_DATA8(0xFF);
+  }
+
+  // ---- Layout for left half (396x272 visible area) ----
+  // With rotation 180, logical x=0..395 maps to the right physical half,
+  // and x=396..791 maps to the left physical half.
+  // We draw in x=0..395 which appears on the visible left after rotation.
+  int halfW = 396;  // left half visible width
+  int midX = halfW / 2;    // center of left half = 198
+  int topHeight = EPD_H - 60;  // Give temps ~78% of height
 
   // Font size for temperatures (78px Logisoso - numbers only)
   int tempFontSize = 78;
 
-  // Center points for left and right columns
-  int leftCenter = midX / 2 - 10;
-  int rightCenter = midX + midX / 2 - 10;
+  // Center points for left and right columns within the left half
+  int leftCenter = halfW / 4 - 10;
+  int rightCenter = halfW * 3 / 4;
 
   // Top-left: Bern Temperature
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "%s", temperature.c_str());
   int tempWidth = EPD_GetUTF8TextWidth(buffer, tempFontSize);
-  EPD_ShowStringUTF8(leftCenter - tempWidth / 2, 30, buffer, tempFontSize, BLACK);
+  EPD_ShowStringUTF8(leftCenter - tempWidth / 2, 20, buffer, tempFontSize, BLACK);
   
   // Draw degree symbol smaller next to temperature
   int degX = leftCenter + tempWidth / 2 + 2;
-  EPD_ShowStringUTF8(degX, 30, "o", 16, BLACK);
+  EPD_ShowStringUTF8(degX, 20, "o", 16, BLACK);
   
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "Local");
   int labelWidth = EPD_GetUTF8TextWidth(buffer, 16);
-  EPD_ShowStringUTF8(leftCenter - labelWidth / 2, 115, buffer, 16, BLACK);
+  EPD_ShowStringUTF8(leftCenter - labelWidth / 2, 102, buffer, 16, BLACK);
 
   // Top-right: Aare Temperature
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "%s", aareTemp.c_str());
   int aareWidth = EPD_GetUTF8TextWidth(buffer, tempFontSize);
-  EPD_ShowStringUTF8(rightCenter - aareWidth / 2, 30, buffer, tempFontSize, BLACK);
+  EPD_ShowStringUTF8(rightCenter - aareWidth / 2, 20, buffer, tempFontSize, BLACK);
   
   // Draw degree symbol smaller next to temperature
   degX = rightCenter + aareWidth / 2 + 2;
-  EPD_ShowStringUTF8(degX, 30, "o", 16, BLACK);
+  EPD_ShowStringUTF8(degX, 20, "o", 16, BLACK);
   
   memset(buffer, 0, sizeof(buffer));
   snprintf(buffer, sizeof(buffer), "Aare");
   labelWidth = EPD_GetUTF8TextWidth(buffer, 16);
-  EPD_ShowStringUTF8(rightCenter - labelWidth / 2, 115, buffer, 16, BLACK);
+  EPD_ShowStringUTF8(rightCenter - labelWidth / 2, 102, buffer, 16, BLACK);
 
-  // Middle: AareGuru text or staleness warning, centered
+  // Middle: AareGuru text or staleness warning, centered in left half
   String staleMsg = getStalenessMessage();
   const char* middleText = nullptr;
   char aareTextBuf[64];
   
   if (staleMsg.length() > 0) {
-    // Show staleness warning instead of aare text
     strncpy(aareTextBuf, staleMsg.c_str(), sizeof(aareTextBuf) - 1);
     aareTextBuf[sizeof(aareTextBuf) - 1] = '\0';
     middleText = aareTextBuf;
@@ -1055,18 +1117,16 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   }
 
   if (middleText != nullptr) {
-    // Truncate to fit display width with margin
-    int maxWidth = EPD_W - 40;
-    // Trim until it fits
+    int maxWidth = halfW - 20;
     while (strlen(aareTextBuf) > 0 && EPD_GetUTF8TextWidth(aareTextBuf, 16) > maxWidth) {
       aareTextBuf[strlen(aareTextBuf) - 1] = '\0';
     }
     int aareTextWidth = EPD_GetUTF8TextWidth(aareTextBuf, 16);
-    EPD_ShowStringUTF8(midX - aareTextWidth / 2, 172, aareTextBuf, 16, BLACK);
+    EPD_ShowStringUTF8(midX - aareTextWidth / 2, 152, aareTextBuf, 16, BLACK);
   }
 
   // Bottom-left: Rain status > UV warning (>=6) > Pollen (priority order)
-  int bottomY = topHeight + 10;
+  int bottomY = topHeight + 5;
   if (rainStatus.length() > 0) {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", rainStatus.c_str());
@@ -1076,9 +1136,8 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "weather");
     int rainLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
-    EPD_ShowStringUTF8(leftCenter - rainLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
+    EPD_ShowStringUTF8(leftCenter - rainLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
   } else if (uvIndexMax >= 8) {
-    // UV warning: 8-10 very high, 11+ extreme
     const char* uvLabel;
     if (uvIndexMax >= 11) uvLabel = "extreme";
     else uvLabel = "very high";
@@ -1091,7 +1150,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "uv index");
     int uvLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
-    EPD_ShowStringUTF8(leftCenter - uvLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
+    EPD_ShowStringUTF8(leftCenter - uvLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
   } else {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", pollenLevel.c_str());
@@ -1101,12 +1160,11 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "pollen");
     int pollenLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
-    EPD_ShowStringUTF8(leftCenter - pollenLabelWidth / 2, bottomY + 28, buffer, 12, BLACK);
+    EPD_ShowStringUTF8(leftCenter - pollenLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
   }
 
-  // Bottom-right: Strava or Weight (toggled by rocker switch)
+  // Bottom-right (of left half): Strava or Weight
   if (bottomRightMode == 0 && stravaActivity.length() > 0) {
-    // Strava mode
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", stravaActivity.c_str());
     int stravaWidth = EPD_GetUTF8TextWidth(buffer, 24);
@@ -1116,10 +1174,9 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
       memset(buffer, 0, sizeof(buffer));
       snprintf(buffer, sizeof(buffer), "%s", stravaActivityDate.c_str());
       int dateWidth = EPD_GetUTF8TextWidth(buffer, 12);
-      EPD_ShowStringUTF8(rightCenter - dateWidth / 2, bottomY + 28, buffer, 12, BLACK);
+      EPD_ShowStringUTF8(rightCenter - dateWidth / 2, bottomY + 26, buffer, 12, BLACK);
     }
   } else {
-    // Weight mode
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s kg", weight.c_str());
     int weightWidth = EPD_GetUTF8TextWidth(buffer, 24);
@@ -1128,11 +1185,10 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", weightTrend.c_str());
     int trendWidth = EPD_GetUTF8TextWidth(buffer, 12);
-    EPD_ShowStringUTF8(rightCenter - trendWidth / 2, bottomY + 28, buffer, 12, BLACK);
+    EPD_ShowStringUTF8(rightCenter - trendWidth / 2, bottomY + 26, buffer, 12, BLACK);
   }
 
-  // Push composed buffer to display using partial update (Mode 2)
-  // Only pixels that differ from old RAM (previous frame) will be driven
+  // Push composed buffer to display using partial update
   EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
 
   // Save current frame as previous for next update

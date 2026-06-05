@@ -75,18 +75,23 @@ void Paint_SetPixel(uint16_t Xpoint, uint16_t Ypoint, uint16_t Color)
   uint8_t Rdata;
   switch (Paint.Rotate) {
     case 0:
+      // 8-pixel gap at IC junction (column 396-403 in framebuffer)
+      if (Xpoint >= 396) { Xpoint += 8; }
       X = Xpoint;
       Y = Ypoint;
       break;
     case 90:
+      if (Ypoint >= 396) { Ypoint += 8; }
       X = Paint.WidthMemory - Ypoint - 1;
       Y = Xpoint;
       break;
     case 180:
+      if (Xpoint >= 396) { Xpoint += 8; }
       X = Paint.WidthMemory - Xpoint - 1;
       Y = Paint.HeightMemory - Ypoint - 1;
       break;
     case 270:
+      if (Ypoint >= 396) { Ypoint += 8; }
       X = Ypoint;
       Y = Paint.HeightMemory - Xpoint - 1;
       break;
@@ -97,10 +102,10 @@ void Paint_SetPixel(uint16_t Xpoint, uint16_t Ypoint, uint16_t Color)
   Rdata = Paint.Image[Addr];
   if (Color == BLACK)
   {
-    Paint.Image[Addr] = Rdata & ~(0x80 >> (X % 8)); //将对应数据位置0
+    Paint.Image[Addr] = Rdata & ~(0x80 >> (X % 8));
   }
   else
-    Paint.Image[Addr] = Rdata | (0x80 >> (X % 8));   //将对应数据位置1
+    Paint.Image[Addr] = Rdata | (0x80 >> (X % 8));
 }
 
 /*******************************************************************

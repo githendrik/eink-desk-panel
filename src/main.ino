@@ -15,7 +15,8 @@
 
 ConfigManager config;
 
-uint8_t ImageBW[15000];
+// 5.79" dual-SSD1683: 800/8 * 272 = 27200 bytes
+uint8_t ImageBW[27200];
 
 int httpResponseCode;
 bool forceFullRefresh = true;
@@ -133,20 +134,20 @@ void setup() {
   esp_ota_mark_app_valid_cancel_rollback();
   Serial.println("App marked as valid (rollback cancelled)");
 
-  // Check for OTA update on boot
-  Serial.println("Checking for OTA update...");
+  // OTA boot check disabled on 5.79" branch (would pull old 4.2" firmware)
+  // Serial.println("Checking for OTA update...");
   otaSetProgressCallback([](int percent) {
     display_ota_screen(ImageBW, lastUpdateInfo.version.c_str(), percent);
   });
-  lastUpdateInfo = otaCheckForUpdate();
-  if (lastUpdateInfo.available) {
-    display_ota_screen(ImageBW, lastUpdateInfo.version.c_str(), 0);
-    if (otaApplyUpdate(lastUpdateInfo)) {
-      Serial.println("OTA update applied, rebooting...");
-      delay(1000);
-      ESP.restart();
-    }
-  }
+  // lastUpdateInfo = otaCheckForUpdate();
+  // if (lastUpdateInfo.available) {
+  //   display_ota_screen(ImageBW, lastUpdateInfo.version.c_str(), 0);
+  //   if (otaApplyUpdate(lastUpdateInfo)) {
+  //     Serial.println("OTA update applied, rebooting...");
+  //     delay(1000);
+  //     ESP.restart();
+  //   }
+  // }
 
   fetch_weather_data();
   fetch_weight_data(httpResponseCode);
