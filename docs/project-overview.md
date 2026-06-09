@@ -34,6 +34,8 @@ pio run                # builds both
 
 ## Display Layout
 
+### 4.2" Panel (400x300)
+
 ```
 ┌──────────────────────────────────────┐
 │                                      │
@@ -52,6 +54,29 @@ pio run                # builds both
 - Middle: AareGuru commentary text (centered, truncated if too long)
 - Bottom left: Priority display — Rain > UV (>=8) > Pollen
 - Bottom right: Weight + trend (or Strava activity, toggled via rocker switch)
+
+### 5.79" Panel (792x272) — Dual Half Layout
+
+```
+┌─────────────────────┬─IC─┬──────────────────────────────┐
+│                     │gap │  Today              (32px)   │
+│   23°        11°    │    │  08:00  Meeting     (24px)   │
+│   Local      Aare   │    │                              │
+│                     │    │  Tomorrow           (32px)   │
+│    Geduld, geduld   │    │  14:30  Standup     (24px)   │
+│                     │    │                              │
+│──────────────────── │    │                              │
+│  low     82.3 kg    │    │  Das Chupa Chups-Logo wurde  │
+│ pollen    stable    │    │  von Salvador Dali entworfen. │
+└─────────────────────┴────┴──────────────────────────────┘
+     Left half (396px)        Right half (374px usable)
+```
+
+- Left half: Same layout as 4.2" panel (temperatures, aare text, bottom bar)
+- Right half (x=410 to x=784): Calendar events top-aligned at y=20, useless fact bottom-aligned
+- Day headers in 18pt Helvetica (font size 32), events in 14pt Helvetica (font size 24)
+- Fact renders bottom-aligned in smaller font (size 16) when used as filler below events
+- Fact renders in larger font (size 20) when it's the sole content (no calendar events)
 
 ## Architecture
 
@@ -106,6 +131,8 @@ eink-desk-panel/
 | AareGuru | River temp + text | 10 min | HTTP GET |
 | Withings | Weight + 6-month trend | 6 hours | HTTPS POST |
 | Strava | Last activity | 1 hour | HTTPS GET |
+| Calendar | Today/tomorrow events | 10 min | HTTP GET |
+| Useless Facts | Daily fact (German) | 4 hours (5.79") | HTTPS GET |
 
 ## Token Management
 
@@ -119,7 +146,9 @@ Both Withings and Strava use OAuth2 with single-use refresh tokens:
 ## Refresh Intervals
 
 - Weather + Pollen + UV + Aare: every 10 minutes
+- Calendar: every 10 minutes
 - Strava: every 1 hour
+- Useless fact: every 4 hours (5.79" panel only)
 - Weight: every 6 hours
 
 ## Development Environment

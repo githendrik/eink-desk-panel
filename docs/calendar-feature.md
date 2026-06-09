@@ -1,12 +1,12 @@
 # Calendar Events & Fun Fact Feature
 
-*Added in v0.5.0. 5.79" panel only.*
+*Added in v0.5.0. 5.79" panel only. Layout refined in v0.5.1–v0.5.8.*
 
 ## Overview
 
-The right half of the 5.79" panel (previously blank) displays either:
+The right half of the 5.79" panel (previously blank) displays:
 - **Calendar events** for today and tomorrow, fetched from an iCloud calendar API
-- **A useless fact of the day** (in German), shown when there are no events for either day
+- **A useless fact of the day** (in German), shown below the calendar events when space remains, or as the sole content when there are no events
 
 ## Data Sources
 
@@ -52,11 +52,11 @@ Response:
 GET https://uselessfacts.jsph.pl/api/v2/facts/today?language=de
 ```
 
-Returns a different fact each day. Only fetched when the calendar has zero events for both today and tomorrow.
+Returns a different fact each day. On the 5.79" panel, the fact is always fetched (independent of calendar state) to fill remaining space below events.
 
 ## Display Layout
 
-The right half starts at x=410 (after the 8px IC gap) and extends to x=784, giving ~374px of usable width. Full 272px height.
+The right half starts at x=410 (after the 8px IC gap) and extends to x=784, giving ~374px of usable width. Full 272px height. Content starts at y=20, top-aligned with the large temperature numbers on the left half.
 
 ### With Events
 
@@ -64,34 +64,49 @@ Days with events are rendered top-down. Empty days are skipped entirely (no head
 
 ```
 +--------------------------------------+
-|  Today                      (12px)   |
-|  08:00  Fiete KiTa Waldtag  (16px)  |
+|  Today                      (32px)   |  <- 18pt Helvetica, bold/larger
+|                              +6px    |  <- padding after header
+|  08:00  Fiete KiTa Waldtag  (24px)  |  <- 14pt Helvetica
 |                                      |
-|  Tomorrow                   (12px)   |
-|  14:30  Team Standup         (16px)  |
-|  All day  Oma Geburtstag     (16px)  |
+|  Tomorrow                   (32px)   |
+|                              +6px    |
+|  14:30  Team Standup         (24px)  |
+|  All day  Oma Geburtstag     (24px)  |
+|                                      |
+|                                      |
+|  Das Chupa Chups-Logo wurde   (16px) |  <- smaller filler font
+|  von Salvador Dali entworfen. (16px) |  <- bottom-aligned, 25px margin
 +--------------------------------------+
 ```
 
-- Day headers: 12px font, only shown if that day has events
-- Timed events: `HH:MM  Summary` in 16px, time extracted from ISO start field
-- All-day events: `All day  Summary` in 16px (no time prefix)
+- Day headers: font size 32 (18pt Helvetica), visually distinct from event text
+- Header padding: 6px gap between header and first event
+- Timed events: `HH:MM  Summary` in font size 24 (14pt Helvetica), time extracted from ISO start field
+- All-day events: `All day  Summary` in font size 24 (no time prefix)
 - Long summaries are truncated to fit the available width
-- Spacing: 24px between event lines, 8px gap between day sections
+- Spacing: 30px between event lines, 14px gap between day sections
+- Useless fact renders bottom-aligned in remaining space (font size 16, 9x15 pixel font)
 
-### Without Events (Fun Fact)
+### Without Events (Fun Fact Only)
 
 ```
 +--------------------------------------+
 |                                      |
-|  Das Chupa Chups-Logo wurde          |
-|  von Salvador Dali entworfen.        |
+|  Das Chupa Chups-Logo wurde          |  <- 20px font (14pt Helvetica)
+|  von Salvador Dali entworfen.        |  <- bottom-aligned, 25px margin
 |                                      |
 +--------------------------------------+
 ```
 
-- 16px font, word-wrapped to fit the right half width
-- Vertically offset 20px from the top
+- Font size 20 (14pt Helvetica) when the fact is the sole content — more prominent
+- Word-wrapped to fit the right half width
+- Bottom-aligned with 25px bottom margin
+
+### Font Size Logic
+
+The fact uses two different font sizes depending on context:
+- **Filler** (calendar events present): font size 16, line height 20px — subtle, blends in
+- **Sole content** (no events): font size 20, line height 26px — more prominent
 
 ## Configuration
 
@@ -104,23 +119,30 @@ Set via the web dashboard (`http://eink-panel.local`):
 
 If the API URL is empty, calendar fetching is skipped entirely (no network calls).
 
-## Fetch Interval
+## Fetch Intervals
 
+### Calendar
 - Normal: every 10 minutes (`CALENDAR_INTERVAL`)
 - On failure: every 1 minute (`RETRY_INTERVAL`)
 - Staleness tracking: `calendarFailCount` incremented on each failure, reset to 0 on success
 - Also fetched once at boot in `setup()`
 
-## Files Modified (v0.5.0)
+### Useless Fact (5.79" panel only)
+- Normal: every 4 hours (`FACT_INTERVAL`)
+- Fetched once at boot in `setup()`
+- Independent of calendar state — always available to fill remaining space
+- On the 4.2" panel, the fact is only fetched when there are zero calendar events (legacy behavior)
+
+## Files Modified
 
 | File | Changes |
 |------|---------|
 | `src/config_manager.h` | Added `calendarApiUrl`, `calendarBearerToken` with NVS load/save |
 | `src/main_screen.h` | Added `CalendarEvent`/`CalendarDay` structs, `fetch_calendar_data()`, `fetch_useless_fact()`, right-half rendering in `display_main_screen()` |
-| `src/main.ino` | Added calendar fetch to boot sequence and loop with interval/retry |
+| `src/main.ino` | Added calendar fetch to boot sequence and loop with interval/retry. Separate `FACT_INTERVAL` (4h) for 5.79" panel. |
 | `src/web_dashboard.h` | Added Calendar config section (API URL + Bearer Token) |
 
 ## Panel Scope
 
-- **5.79" panel**: Full feature (fetch + render). Rendering is guarded by `#ifdef PANEL_579`.
-- **4.2" panel**: Dashboard config fields are visible but data is not rendered. Fetching only occurs if a calendar URL is configured (which it wouldn't be for the 4.2" panel).
+- **5.79" panel**: Full feature (fetch + render). Rendering is guarded by `#ifdef PANEL_579`. Fact always fetched on its own 4h cycle.
+- **4.2" panel**: Dashboard config fields are visible but data is not rendered. Fact only fetched when calendar has zero events.
