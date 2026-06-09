@@ -839,6 +839,13 @@ bool fetch_calendar_data() {
       uselessFact = "";
     }
 
+    #ifdef PANEL_579
+    // On 5.7" panel, always fetch a fact to fill remaining space
+    if (uselessFact.length() == 0) {
+      fetch_useless_fact();
+    }
+    #endif
+
     return true;
   } else {
     remote_log(LOG_ERROR, "Calendar", "API Error HTTP: " + String(rc));
