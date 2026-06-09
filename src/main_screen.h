@@ -1430,8 +1430,11 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
 
         rhY += daySectionGap;  // spacing between days
       }
-    } else if (uselessFact.length() > 0) {
-      // Word-wrap useless fact into the right half
+    }
+
+    // Show useless fact if there's remaining vertical space
+    // (either no events at all, or after a short event list)
+    if (uselessFact.length() > 0 && rhY + 40 < EPD_H) {
       int factY = rhY + 10;  // some top padding
       int lineHeight = 26;
       int fontSize = 20;
