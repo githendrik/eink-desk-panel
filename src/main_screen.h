@@ -1306,7 +1306,12 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
       aareTextBuf[strlen(aareTextBuf) - 1] = '\0';
     }
     int aareTextWidth = EPD_GetUTF8TextWidth(aareTextBuf, 16);
-    EPD_ShowStringUTF8(midX - aareTextWidth / 2, 180, aareTextBuf, 16, BLACK);
+#ifdef PANEL_579
+    int aareTextY = 155;
+#else
+    int aareTextY = 180;
+#endif
+    EPD_ShowStringUTF8(midX - aareTextWidth / 2, aareTextY, aareTextBuf, 16, BLACK);
   }
 
   // Bottom-left: Rain status > UV warning (>=6) > Pollen (priority order)
@@ -1378,7 +1383,13 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     int rhX = 410;                      // start after IC gap (396 + 8 + margin)
     int rhMaxX = EPD_W_VISIBLE - 8;     // 784, right margin
     int rhW = rhMaxX - rhX;             // ~374 usable width
-    int rhY = 15;                       // top margin
+    int rhY = 20;                       // top margin (aligned with temperature numbers)
+
+    int headerFontSize = 24;            // 14pt Helvetica for day labels
+    int eventFontSize = 20;             // 14pt Helvetica for event text
+    int headerLineHeight = 30;          // vertical advance after day header
+    int eventLineHeight = 28;           // vertical advance after each event
+    int daySectionGap = 12;             // spacing between day sections
 
     if (calendarTotalEvents > 0) {
       // Render calendar events
@@ -1389,8 +1400,8 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
         if (calendarDays[d].label.length() > 0) {
           memset(buffer, 0, sizeof(buffer));
           snprintf(buffer, sizeof(buffer), "%s", calendarDays[d].label.c_str());
-          EPD_ShowStringUTF8(rhX, rhY, buffer, 12, BLACK);
-          rhY += 20;
+          EPD_ShowStringUTF8(rhX, rhY, buffer, headerFontSize, BLACK);
+          rhY += headerLineHeight;
         }
 
         // Events
@@ -1408,21 +1419,21 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
           }
 
           // Truncate if too wide
-          while (strlen(buffer) > 0 && EPD_GetUTF8TextWidth(buffer, 16) > rhW) {
+          while (strlen(buffer) > 0 && EPD_GetUTF8TextWidth(buffer, eventFontSize) > rhW) {
             buffer[strlen(buffer) - 1] = '\0';
           }
 
-          EPD_ShowStringUTF8(rhX, rhY, buffer, 16, BLACK);
-          rhY += 24;
+          EPD_ShowStringUTF8(rhX, rhY, buffer, eventFontSize, BLACK);
+          rhY += eventLineHeight;
         }
 
-        rhY += 8;  // spacing between days
+        rhY += daySectionGap;  // spacing between days
       }
     } else if (uselessFact.length() > 0) {
       // Word-wrap useless fact into the right half
-      int factY = rhY + 20;  // some top padding
-      int lineHeight = 22;
-      int fontSize = 16;
+      int factY = rhY + 10;  // some top padding
+      int lineHeight = 26;
+      int fontSize = 20;
 
       // Copy fact into a mutable buffer
       char factBuf[512];
