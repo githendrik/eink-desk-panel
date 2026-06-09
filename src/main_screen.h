@@ -1318,16 +1318,17 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
 
   // Bottom-left: Rain status > UV warning (>=6) > Pollen (priority order)
   int bottomY = topHeight + 5;
+  int bottomLeftCenter = leftCenter + 5; // nudge right to visually align with temperature above
   if (rainStatus.length() > 0) {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", rainStatus.c_str());
     int rainWidth = EPD_GetUTF8TextWidth(buffer, 24);
-    EPD_ShowStringUTF8(leftCenter - rainWidth / 2, bottomY, buffer, 24, BLACK);
+    EPD_ShowStringUTF8(bottomLeftCenter - rainWidth / 2, bottomY, buffer, 24, BLACK);
     
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "weather");
     int rainLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
-    EPD_ShowStringUTF8(leftCenter - rainLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
+    EPD_ShowStringUTF8(bottomLeftCenter - rainLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
   } else if (uvIndexMax >= 8) {
     const char* uvLabel;
     if (uvIndexMax >= 11) uvLabel = "extreme";
@@ -1336,22 +1337,22 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", uvLabel);
     int uvWidth = EPD_GetUTF8TextWidth(buffer, 24);
-    EPD_ShowStringUTF8(leftCenter - uvWidth / 2, bottomY, buffer, 24, BLACK);
+    EPD_ShowStringUTF8(bottomLeftCenter - uvWidth / 2, bottomY, buffer, 24, BLACK);
     
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "uv index");
     int uvLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
-    EPD_ShowStringUTF8(leftCenter - uvLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
+    EPD_ShowStringUTF8(bottomLeftCenter - uvLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
   } else {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", pollenLevel.c_str());
     int pollenWidth = EPD_GetUTF8TextWidth(buffer, 24);
-    EPD_ShowStringUTF8(leftCenter - pollenWidth / 2, bottomY, buffer, 24, BLACK);
+    EPD_ShowStringUTF8(bottomLeftCenter - pollenWidth / 2, bottomY, buffer, 24, BLACK);
     
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "pollen");
     int pollenLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
-    EPD_ShowStringUTF8(leftCenter - pollenLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
+    EPD_ShowStringUTF8(bottomLeftCenter - pollenLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
   }
 
   // Bottom-right (of left half): Strava or Weight
