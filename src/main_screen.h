@@ -832,17 +832,12 @@ bool fetch_calendar_data() {
     http.end();
     calendarFailCount = 0;
 
-    // If no events, fetch a useless fact
+    // If no events, fetch a useless fact (for 4.2" panel fallback)
+    #ifndef PANEL_579
     if (calendarTotalEvents == 0) {
       fetch_useless_fact();
     } else {
       uselessFact = "";
-    }
-
-    #ifdef PANEL_579
-    // On 5.7" panel, always fetch a fact to fill remaining space
-    if (uselessFact.length() == 0) {
-      fetch_useless_fact();
     }
     #endif
 

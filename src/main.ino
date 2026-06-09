@@ -153,6 +153,9 @@ void setup() {
   fetch_weight_data(httpResponseCode);
   fetch_strava_data(httpResponseCode);
   fetch_calendar_data();
+  #ifdef PANEL_579
+  fetch_useless_fact();
+  #endif
 
   display_main_screen(ImageBW, forceFullRefresh);
 }
@@ -164,6 +167,7 @@ void loop() {
   static unsigned long lastWeightFetch = 0;
   static unsigned long lastStravaFetch = 0;
   static unsigned long lastCalendarFetch = 0;
+  static unsigned long lastFactFetch = 0;
 
   // WiFi watchdog: reboot if disconnected for >5 minutes
   static unsigned long wifiLostSince = 0;
@@ -191,6 +195,7 @@ void loop() {
   const unsigned long POLLEN_INTERVAL = 1000UL * 60 * 60;     // 1 hour (pollen doesn't change fast)
   const unsigned long AARE_INTERVAL = 1000UL * 60 * 10;       // 10 min
   const unsigned long CALENDAR_INTERVAL = 1000UL * 60 * 10;   // 10 min
+  const unsigned long FACT_INTERVAL = 1000UL * 60 * 60 * 4;   // 4 hours
   const unsigned long RETRY_INTERVAL = 1000UL * 60 * 1;       // 1 min retry on failure
 
   // Dashboard-triggered OTA check
@@ -337,6 +342,16 @@ void loop() {
     lastCalendarFetch = millis();
     needsRedraw = true;
   }
+
+  // Useless fact fetch (5.7" panel only, every 4 hours)
+  #ifdef PANEL_579
+  if (millis() - lastFactFetch >= FACT_INTERVAL) {
+    Serial.println("Fetching useless fact...");
+    fetch_useless_fact();
+    lastFactFetch = millis();
+    needsRedraw = true;
+  }
+  #endif
 
   // Single repaint after all fetches are done
   if (needsRedraw) {
