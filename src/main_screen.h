@@ -1385,11 +1385,12 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     int rhW = rhMaxX - rhX;             // ~374 usable width
     int rhY = 20;                       // top margin (aligned with temperature numbers)
 
-    int headerFontSize = 24;            // 14pt Helvetica for day labels
-    int eventFontSize = 20;             // 14pt Helvetica for event text
-    int headerLineHeight = 30;          // vertical advance after day header
-    int eventLineHeight = 28;           // vertical advance after each event
-    int daySectionGap = 12;             // spacing between day sections
+    int headerFontSize = 32;            // 18pt Helvetica for day labels
+    int eventFontSize = 24;             // 14pt Helvetica for event text
+    int headerLineHeight = 34;          // vertical advance after day header
+    int headerPadding = 6;              // extra gap between header and first event
+    int eventLineHeight = 30;           // vertical advance after each event
+    int daySectionGap = 14;             // spacing between day sections
 
     if (calendarTotalEvents > 0) {
       // Render calendar events
@@ -1401,7 +1402,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
           memset(buffer, 0, sizeof(buffer));
           snprintf(buffer, sizeof(buffer), "%s", calendarDays[d].label.c_str());
           EPD_ShowStringUTF8(rhX, rhY, buffer, headerFontSize, BLACK);
-          rhY += headerLineHeight;
+          rhY += headerLineHeight + headerPadding;
         }
 
         // Events
