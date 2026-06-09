@@ -145,6 +145,37 @@ python3 scripts/get_strava_credentials.py
 
 ---
 
+## Calendar API (self-hosted)
+
+```
+GET http://calendar-api:3000/events
+Authorization: Bearer {TOKEN}
+```
+
+**Response fields used**:
+- `today.label` / `tomorrow.label`: Day label ("Today", "Tomorrow")
+- `today.events[]` / `tomorrow.events[]`: Array of events (max 3 per day)
+  - `summary`: Event title
+  - `start`: ISO 8601 start time (e.g. "2026-06-09T08:00:00")
+  - `allDay`: Boolean — if true, no time is displayed
+
+**Fallback**: When both days have zero events, a useless fact is fetched instead.
+
+---
+
+## Useless Facts API
+
+```
+GET https://uselessfacts.jsph.pl/api/v2/facts/today?language=de
+```
+
+**Response fields used**:
+- `text`: The fact string (German)
+
+Only called when calendar returns zero events for both today and tomorrow.
+
+---
+
 ## Error Handling
 
 All APIs use this pattern:
