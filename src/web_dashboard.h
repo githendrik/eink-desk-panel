@@ -64,6 +64,10 @@ input{width:100%;padding:8px;margin-top:2px;border:1px solid #ccc;border-radius:
 <h2>Google Pollen</h2>
 <label>API Key<input type="password" id="g_pollen"></label>
 
+<h2>Calendar</h2>
+<label>API URL<input type="text" id="cal_url" placeholder="http://calendar-api:3000/events"></label>
+<label>Bearer Token<input type="password" id="cal_token"></label>
+
 <h2>System Logging</h2>
 <label>Discord Webhook URL<input type="password" id="d_webhook"></label>
 <label>Remote Log Level
@@ -109,6 +113,8 @@ function save(){
     s_at:document.getElementById('s_at').value,
     s_rt:document.getElementById('s_rt').value,
     g_pollen:document.getElementById('g_pollen').value,
+    cal_url:document.getElementById('cal_url').value,
+    cal_token:document.getElementById('cal_token').value,
     d_webhook:document.getElementById('d_webhook').value,
     d_loglevel:parseInt(document.getElementById('d_loglevel').value),
     mdns_host:document.getElementById('mdns_host').value
@@ -168,6 +174,8 @@ fetch('/status').then(function(r){return r.json()}).then(function(j){
   if(j.w_uid)document.getElementById('w_uid').value=j.w_uid;
   if(j.s_cid)document.getElementById('s_cid').value=j.s_cid;
   if(j.g_pollen)document.getElementById('g_pollen').value=j.g_pollen;
+  if(j.cal_url)document.getElementById('cal_url').value=j.cal_url;
+  if(j.cal_token)document.getElementById('cal_token').value=j.cal_token;
   if(j.d_webhook)document.getElementById('d_webhook').value=j.d_webhook;
   if(j.d_loglevel!==undefined)document.getElementById('d_loglevel').value=j.d_loglevel;
   if(j.mdns_host)document.getElementById('mdns_host').value=j.mdns_host;
@@ -224,6 +232,16 @@ void setupWebDashboard() {
        if (val.length() > 0) config.googlePollenApiKey = val;
      }
 
+    // Calendar
+    if (JSON.typeof(obj["cal_url"]) != "undefined") {
+      String val = (const char*)obj["cal_url"];
+      config.calendarApiUrl = val;  // allow empty to disable
+    }
+    if (JSON.typeof(obj["cal_token"]) != "undefined") {
+      String val = (const char*)obj["cal_token"];
+      config.calendarBearerToken = val;
+    }
+
     // Strava
     if (JSON.typeof(obj["s_cid"]) != "undefined") {
       String val = (const char*)obj["s_cid"];
@@ -276,6 +294,8 @@ void setupWebDashboard() {
     json += "\"w_uid\":\"" + config.withingsUserId + "\",";
     json += "\"s_cid\":\"" + config.stravaClientId + "\",";
     json += "\"g_pollen\":\"" + config.googlePollenApiKey + "\",";
+    json += "\"cal_url\":\"" + config.calendarApiUrl + "\",";
+    json += "\"cal_token\":\"" + config.calendarBearerToken + "\",";
     json += "\"d_webhook\":\"" + config.discordWebhookUrl + "\",";
     json += "\"d_loglevel\":" + String(config.remoteLogLevel) + ",";
     json += "\"mdns_host\":\"" + config.mdnsHostname + "\"";

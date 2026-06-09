@@ -152,6 +152,7 @@ void setup() {
   fetch_weather_data();
   fetch_weight_data(httpResponseCode);
   fetch_strava_data(httpResponseCode);
+  fetch_calendar_data();
 
   display_main_screen(ImageBW, forceFullRefresh);
 }
@@ -162,11 +163,34 @@ void loop() {
   static unsigned long lastAareFetch = 0;
   static unsigned long lastWeightFetch = 0;
   static unsigned long lastStravaFetch = 0;
+  static unsigned long lastCalendarFetch = 0;
+
+  // WiFi watchdog: reboot if disconnected for >5 minutes
+  static unsigned long wifiLostSince = 0;
+  const unsigned long WIFI_REBOOT_TIMEOUT = 1000UL * 60 * 5;  // 5 min
+
+  if (WiFi.status() != WL_CONNECTED) {
+    if (wifiLostSince == 0) {
+      wifiLostSince = millis();
+      Serial.println("WiFi disconnected, starting watchdog...");
+    } else if (millis() - wifiLostSince >= WIFI_REBOOT_TIMEOUT) {
+      Serial.println("WiFi disconnected for 5 min, rebooting...");
+      ESP.restart();
+    }
+  } else {
+    if (wifiLostSince != 0) {
+      Serial.print("WiFi reconnected after ");
+      Serial.print((millis() - wifiLostSince) / 1000);
+      Serial.println("s");
+      wifiLostSince = 0;
+    }
+  }
 
   // Intervals
   const unsigned long OPENMETEO_INTERVAL = 1000UL * 60 * 10;  // 10 min
   const unsigned long POLLEN_INTERVAL = 1000UL * 60 * 60;     // 1 hour (pollen doesn't change fast)
   const unsigned long AARE_INTERVAL = 1000UL * 60 * 10;       // 10 min
+  const unsigned long CALENDAR_INTERVAL = 1000UL * 60 * 10;   // 10 min
   const unsigned long RETRY_INTERVAL = 1000UL * 60 * 1;       // 1 min retry on failure
 
   // Dashboard-triggered OTA check
@@ -302,6 +326,15 @@ void loop() {
     Serial.println("Fetching Strava data...");
     fetch_strava_data(httpResponseCode);
     lastStravaFetch = millis();
+    needsRedraw = true;
+  }
+
+  // Calendar fetch
+  unsigned long calendarInterval = (calendarFailCount > 0) ? RETRY_INTERVAL : CALENDAR_INTERVAL;
+  if (millis() - lastCalendarFetch >= calendarInterval) {
+    Serial.println("Fetching calendar data...");
+    fetch_calendar_data();
+    lastCalendarFetch = millis();
     needsRedraw = true;
   }
 

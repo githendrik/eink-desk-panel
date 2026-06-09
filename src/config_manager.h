@@ -25,6 +25,10 @@ public:
   String stravaAccessToken;
   String stravaRefreshToken;
 
+  // Calendar
+  String calendarApiUrl;
+  String calendarBearerToken;
+
   // Firmware
   String firmwareVersion;
 
@@ -63,6 +67,11 @@ public:
     stravaRefreshToken = prefs.getString("refresh_token", "");
     prefs.end();
 
+    prefs.begin("calendar", true);
+    calendarApiUrl = prefs.getString("api_url", "");
+    calendarBearerToken = prefs.getString("bearer", "");
+    prefs.end();
+
     prefs.begin("misc", true);
     discordWebhookUrl = prefs.getString("webhook", "");
     remoteLogLevel = prefs.getInt("log_level", 3);  // Default: ERROR
@@ -82,6 +91,7 @@ public:
     saveWithings();
     saveGooglePollen();
     saveStrava();
+    saveCalendar();
     saveMisc();
     saveFirmwareVersion();
   }
@@ -122,6 +132,14 @@ public:
     prefs.end();
   }
 
+  void saveCalendar() {
+    Preferences prefs;
+    prefs.begin("calendar", false);
+    prefs.putString("api_url", calendarApiUrl);
+    prefs.putString("bearer", calendarBearerToken);
+    prefs.end();
+  }
+
   void saveMisc() {
     Preferences prefs;
     prefs.begin("misc", false);
@@ -141,7 +159,7 @@ public:
   // Clear all NVS data (for factory reset)
   void clearAll() {
     Preferences prefs;
-    const char* namespaces[] = {"wifi", "withings", "google", "strava", "firmware", "misc"};
+    const char* namespaces[] = {"wifi", "withings", "google", "strava", "calendar", "firmware", "misc"};
     for (auto ns : namespaces) {
       prefs.begin(ns, false);
       prefs.clear();

@@ -39,6 +39,22 @@ String stravaActivityDate = "";  // e.g. "2h ago" or "3d ago"
 // Bottom-right display mode: 0 = strava (default for now), 1 = weight
 int bottomRightMode = 1;
 
+// Calendar data
+struct CalendarEvent {
+  String summary;
+  String startTime;  // "HH:MM" or "" for all-day
+  bool allDay;
+};
+struct CalendarDay {
+  String label;      // "Today" or "Tomorrow"
+  CalendarEvent events[3];
+  int eventCount;
+};
+CalendarDay calendarDays[2];  // [0]=today, [1]=tomorrow
+int calendarTotalEvents = 0;
+String uselessFact = "";
+int calendarFailCount = 0;
+
 // Staleness tracking: count consecutive failures per source
 // After 2 consecutive failures, data is considered stale
 int openmeteoFailCount = 0;
@@ -723,6 +739,148 @@ bool fetch_aare_data() {
   }
 }
 
+// --- Calendar ---
+
+void fetch_useless_fact();  // forward declaration
+
+bool fetch_calendar_data() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi Disconnected");
+    calendarFailCount++;
+    return false;
+  }
+
+  if (config.calendarApiUrl.length() == 0) {
+    Serial.println("No calendar API URL configured, skipping");
+    return false;
+  }
+
+  WiFiClient client;
+  HTTPClient http;
+  http.setTimeout(10000);
+  http.begin(client, config.calendarApiUrl);
+  if (config.calendarBearerToken.length() > 0) {
+    http.addHeader("Authorization", "Bearer " + config.calendarBearerToken);
+  }
+
+  int rc = http.GET();
+
+  if (rc == 200) {
+    String payload = http.getString();
+    Serial.println(payload);
+    JSONVar calObj = JSON.parse(payload);
+
+    if (JSON.typeof(calObj) == "undefined") {
+      Serial.println("Parsing calendar data failed!");
+      http.end();
+      calendarFailCount++;
+      return false;
+    }
+
+    calendarTotalEvents = 0;
+
+    // Parse today and tomorrow
+    const char* keys[] = {"today", "tomorrow"};
+    for (int d = 0; d < 2; d++) {
+      calendarDays[d].eventCount = 0;
+      calendarDays[d].label = "";
+
+      if (JSON.typeof(calObj[keys[d]]) == "undefined") continue;
+
+      JSONVar day = calObj[keys[d]];
+      if (JSON.typeof(day["label"]) != "undefined") {
+        calendarDays[d].label = (const char*)day["label"];
+      }
+
+      if (JSON.typeof(day["events"]) != "undefined") {
+        int count = day["events"].length();
+        if (count > 3) count = 3;  // max 3 events per day
+
+        for (int i = 0; i < count; i++) {
+          JSONVar ev = day["events"][i];
+          calendarDays[d].events[i].summary = "";
+          calendarDays[d].events[i].startTime = "";
+          calendarDays[d].events[i].allDay = false;
+
+          if (JSON.typeof(ev["summary"]) != "undefined") {
+            calendarDays[d].events[i].summary = (const char*)ev["summary"];
+          }
+
+          if (JSON.typeof(ev["allDay"]) != "undefined") {
+            calendarDays[d].events[i].allDay = (bool)ev["allDay"];
+          }
+
+          if (!calendarDays[d].events[i].allDay && JSON.typeof(ev["start"]) != "undefined") {
+            // Extract HH:MM from ISO 8601 "2026-06-09T08:00:00"
+            String start = (const char*)ev["start"];
+            int tPos = start.indexOf('T');
+            if (tPos >= 0 && start.length() >= tPos + 6) {
+              calendarDays[d].events[i].startTime = start.substring(tPos + 1, tPos + 6);
+            }
+          }
+
+          calendarDays[d].eventCount++;
+          calendarTotalEvents++;
+        }
+      }
+    }
+
+    Serial.print("Calendar: ");
+    Serial.print(calendarTotalEvents);
+    Serial.println(" events total");
+    remote_log(LOG_INFO, "Calendar", "Success. Events: " + String(calendarTotalEvents));
+    http.end();
+    calendarFailCount = 0;
+
+    // If no events, fetch a useless fact
+    if (calendarTotalEvents == 0) {
+      fetch_useless_fact();
+    } else {
+      uselessFact = "";
+    }
+
+    return true;
+  } else {
+    remote_log(LOG_ERROR, "Calendar", "API Error HTTP: " + String(rc));
+    Serial.print("Calendar API error: ");
+    Serial.println(rc);
+    http.end();
+    calendarFailCount++;
+    return false;
+  }
+}
+
+void fetch_useless_fact() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi Disconnected - cannot fetch fact");
+    return;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.setTimeout(10000);
+  http.begin(client, "https://uselessfacts.jsph.pl/api/v2/facts/today?language=de");
+
+  int rc = http.GET();
+
+  if (rc == 200) {
+    String payload = http.getString();
+    JSONVar factObj = JSON.parse(payload);
+
+    if (JSON.typeof(factObj) != "undefined" && JSON.typeof(factObj["text"]) != "undefined") {
+      uselessFact = (const char*)factObj["text"];
+      Serial.print("Useless fact: ");
+      Serial.println(uselessFact);
+    }
+  } else {
+    Serial.print("Useless fact API error: ");
+    Serial.println(rc);
+  }
+
+  http.end();
+}
+
 // Legacy wrapper for initial boot fetch (calls all three)
 void fetch_weather_data() {
   fetch_openmeteo_data();
@@ -1213,6 +1371,102 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     int trendWidth = EPD_GetUTF8TextWidth(buffer, 12);
     EPD_ShowStringUTF8(rightCenter - trendWidth / 2, bottomY + 26, buffer, 12, BLACK);
   }
+
+#ifdef PANEL_579
+  // ---- Right half: Calendar events or useless fact ----
+  {
+    int rhX = 410;                      // start after IC gap (396 + 8 + margin)
+    int rhMaxX = EPD_W_VISIBLE - 8;     // 784, right margin
+    int rhW = rhMaxX - rhX;             // ~374 usable width
+    int rhY = 15;                       // top margin
+
+    if (calendarTotalEvents > 0) {
+      // Render calendar events
+      for (int d = 0; d < 2; d++) {
+        if (calendarDays[d].eventCount == 0) continue;
+
+        // Day header ("Today" / "Tomorrow")
+        if (calendarDays[d].label.length() > 0) {
+          memset(buffer, 0, sizeof(buffer));
+          snprintf(buffer, sizeof(buffer), "%s", calendarDays[d].label.c_str());
+          EPD_ShowStringUTF8(rhX, rhY, buffer, 12, BLACK);
+          rhY += 20;
+        }
+
+        // Events
+        for (int i = 0; i < calendarDays[d].eventCount; i++) {
+          CalendarEvent& ev = calendarDays[d].events[i];
+
+          if (ev.allDay) {
+            // All-day: render summary with indent matching timed events
+            memset(buffer, 0, sizeof(buffer));
+            snprintf(buffer, sizeof(buffer), "All day  %s", ev.summary.c_str());
+          } else {
+            // Timed: "HH:MM  Summary"
+            memset(buffer, 0, sizeof(buffer));
+            snprintf(buffer, sizeof(buffer), "%s  %s", ev.startTime.c_str(), ev.summary.c_str());
+          }
+
+          // Truncate if too wide
+          while (strlen(buffer) > 0 && EPD_GetUTF8TextWidth(buffer, 16) > rhW) {
+            buffer[strlen(buffer) - 1] = '\0';
+          }
+
+          EPD_ShowStringUTF8(rhX, rhY, buffer, 16, BLACK);
+          rhY += 24;
+        }
+
+        rhY += 8;  // spacing between days
+      }
+    } else if (uselessFact.length() > 0) {
+      // Word-wrap useless fact into the right half
+      int factY = rhY + 20;  // some top padding
+      int lineHeight = 22;
+      int fontSize = 16;
+
+      // Copy fact into a mutable buffer
+      char factBuf[512];
+      strncpy(factBuf, uselessFact.c_str(), sizeof(factBuf) - 1);
+      factBuf[sizeof(factBuf) - 1] = '\0';
+
+      char* remaining = factBuf;
+      while (*remaining && factY + lineHeight < EPD_H - 10) {
+        // Find how many characters fit on this line
+        char lineBuf[256];
+        int len = strlen(remaining);
+        if (len > (int)sizeof(lineBuf) - 1) len = sizeof(lineBuf) - 1;
+        strncpy(lineBuf, remaining, len);
+        lineBuf[len] = '\0';
+
+        // Shrink until it fits the width
+        while (strlen(lineBuf) > 0 && EPD_GetUTF8TextWidth(lineBuf, fontSize) > rhW) {
+          lineBuf[strlen(lineBuf) - 1] = '\0';
+        }
+
+        int lineLen = strlen(lineBuf);
+        if (lineLen == 0) break;
+
+        // If we truncated and the next char isn't a space/end, back up to last space
+        if (lineLen < (int)strlen(remaining) && remaining[lineLen] != ' ') {
+          int lastSpace = -1;
+          for (int j = lineLen - 1; j >= 0; j--) {
+            if (lineBuf[j] == ' ') { lastSpace = j; break; }
+          }
+          if (lastSpace > 0) {
+            lineBuf[lastSpace] = '\0';
+            lineLen = lastSpace;
+          }
+        }
+
+        EPD_ShowStringUTF8(rhX, factY, lineBuf, fontSize, BLACK);
+        factY += lineHeight;
+
+        remaining += lineLen;
+        while (*remaining == ' ') remaining++;  // skip spaces at line break
+      }
+    }
+  }
+#endif
 
   // Push composed buffer to display using partial update
   EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
