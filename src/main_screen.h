@@ -1436,50 +1436,61 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
 
     // Show useless fact if there's remaining vertical space
     // (either no events at all, or after a short event list)
+    // Bottom-aligned: word-wrap into lines first, then render from bottom up
     if (uselessFact.length() > 0 && rhY + 40 < EPD_H) {
-      int factY = rhY + 10;  // some top padding
       int lineHeight = 26;
       int fontSize = 20;
+      int bottomMargin = 10;
+      int maxLines = 8;
 
-      // Copy fact into a mutable buffer
+      // First pass: word-wrap into line buffer
       char factBuf[512];
       strncpy(factBuf, uselessFact.c_str(), sizeof(factBuf) - 1);
       factBuf[sizeof(factBuf) - 1] = '\0';
 
+      char lines[8][256];
+      int lineCount = 0;
+
       char* remaining = factBuf;
-      while (*remaining && factY + lineHeight < EPD_H - 10) {
-        // Find how many characters fit on this line
-        char lineBuf[256];
+      while (*remaining && lineCount < maxLines) {
         int len = strlen(remaining);
-        if (len > (int)sizeof(lineBuf) - 1) len = sizeof(lineBuf) - 1;
-        strncpy(lineBuf, remaining, len);
-        lineBuf[len] = '\0';
+        if (len > (int)sizeof(lines[0]) - 1) len = sizeof(lines[0]) - 1;
+        strncpy(lines[lineCount], remaining, len);
+        lines[lineCount][len] = '\0';
 
         // Shrink until it fits the width
-        while (strlen(lineBuf) > 0 && EPD_GetUTF8TextWidth(lineBuf, fontSize) > rhW) {
-          lineBuf[strlen(lineBuf) - 1] = '\0';
+        while (strlen(lines[lineCount]) > 0 && EPD_GetUTF8TextWidth(lines[lineCount], fontSize) > rhW) {
+          lines[lineCount][strlen(lines[lineCount]) - 1] = '\0';
         }
 
-        int lineLen = strlen(lineBuf);
+        int lineLen = strlen(lines[lineCount]);
         if (lineLen == 0) break;
 
         // If we truncated and the next char isn't a space/end, back up to last space
         if (lineLen < (int)strlen(remaining) && remaining[lineLen] != ' ') {
           int lastSpace = -1;
           for (int j = lineLen - 1; j >= 0; j--) {
-            if (lineBuf[j] == ' ') { lastSpace = j; break; }
+            if (lines[lineCount][j] == ' ') { lastSpace = j; break; }
           }
           if (lastSpace > 0) {
-            lineBuf[lastSpace] = '\0';
+            lines[lineCount][lastSpace] = '\0';
             lineLen = lastSpace;
           }
         }
 
-        EPD_ShowStringUTF8(rhX, factY, lineBuf, fontSize, BLACK);
-        factY += lineHeight;
-
+        lineCount++;
         remaining += lineLen;
-        while (*remaining == ' ') remaining++;  // skip spaces at line break
+        while (*remaining == ' ') remaining++;
+      }
+
+      // Second pass: render bottom-aligned, but don't overlap calendar events
+      int factStartY = EPD_H - bottomMargin - (lineCount * lineHeight);
+      if (factStartY < rhY + 10) factStartY = rhY + 10;  // don't overlap events
+
+      for (int i = 0; i < lineCount; i++) {
+        int drawY = factStartY + (i * lineHeight);
+        if (drawY + lineHeight > EPD_H - bottomMargin) break;  // safety
+        EPD_ShowStringUTF8(rhX, drawY, lines[i], fontSize, BLACK);
       }
     }
   }
