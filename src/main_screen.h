@@ -1442,7 +1442,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
       bool isFiller = (calendarTotalEvents > 0);
       int lineHeight = isFiller ? 20 : 26;
       int fontSize = isFiller ? 16 : 20;
-      int bottomMargin = 10;
+      int bottomMargin = 25;
       int maxLines = 8;
 
       // First pass: word-wrap into line buffer
