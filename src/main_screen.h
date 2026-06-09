@@ -1438,8 +1438,10 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     // (either no events at all, or after a short event list)
     // Bottom-aligned: word-wrap into lines first, then render from bottom up
     if (uselessFact.length() > 0 && rhY + 40 < EPD_H) {
-      int lineHeight = 26;
-      int fontSize = 20;
+      // Smaller font when used as filler below calendar events
+      bool isFiller = (calendarTotalEvents > 0);
+      int lineHeight = isFiller ? 20 : 26;
+      int fontSize = isFiller ? 16 : 20;
       int bottomMargin = 10;
       int maxLines = 8;
 
