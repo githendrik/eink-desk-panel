@@ -862,7 +862,7 @@ void fetch_useless_fact() {
   client.setInsecure();
   HTTPClient http;
   http.setTimeout(10000);
-  http.begin(client, "https://uselessfacts.jsph.pl/api/v2/facts/today?language=de");
+  http.begin(client, "https://uselessfacts.jsph.pl/api/v2/facts/today");
 
   int rc = http.GET();
 
@@ -1486,9 +1486,17 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
         while (*remaining == ' ') remaining++;
       }
 
-      // Second pass: render bottom-aligned, but don't overlap calendar events
-      int factStartY = EPD_H - bottomMargin - (lineCount * lineHeight);
-      if (factStartY < rhY + 10) factStartY = rhY + 10;  // don't overlap events
+      // Second pass: position the fact text
+      int factStartY;
+      if (isFiller) {
+        // Bottom-aligned when used as filler below calendar events
+        factStartY = EPD_H - bottomMargin - (lineCount * lineHeight);
+        if (factStartY < rhY + 10) factStartY = rhY + 10;  // don't overlap events
+      } else {
+        // Vertically centered on the right half when no events exist
+        int totalFactHeight = lineCount * lineHeight;
+        factStartY = (EPD_H - totalFactHeight) / 2;
+      }
 
       for (int i = 0; i < lineCount; i++) {
         int drawY = factStartY + (i * lineHeight);
