@@ -1486,17 +1486,25 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
         while (*remaining == ' ') remaining++;
       }
 
-      // Second pass: position the fact text
+      // Second pass: position the fact text (including label above)
+      int labelFontSize = 12;
+      int labelGap = 8;  // space between label and fact text
+      int labelHeight = labelFontSize + labelGap;
+
       int factStartY;
       if (isFiller) {
         // Bottom-aligned when used as filler below calendar events
         factStartY = EPD_H - bottomMargin - (lineCount * lineHeight);
-        if (factStartY < rhY + 10) factStartY = rhY + 10;  // don't overlap events
+        if (factStartY < rhY + 10 + labelHeight) factStartY = rhY + 10 + labelHeight;
       } else {
         // Vertically centered on the right half when no events exist
-        int totalFactHeight = lineCount * lineHeight;
+        int totalFactHeight = labelHeight + (lineCount * lineHeight);
         factStartY = (EPD_H - totalFactHeight) / 2;
       }
+
+      // Draw label
+      EPD_ShowStringUTF8(rhX, factStartY, "Fun fact of the day", labelFontSize, BLACK);
+      factStartY += labelHeight;
 
       for (int i = 0; i < lineCount; i++) {
         int drawY = factStartY + (i * lineHeight);
