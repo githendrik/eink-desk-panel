@@ -1247,15 +1247,20 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
 #endif
 
   // ---- Layout ----
-  int midX = LAYOUT_W / 2;
+#ifdef PANEL_579
+  int leftShift = 10;  // shift left-half content left to balance with separator
+#else
+  int leftShift = 0;
+#endif
+  int midX = LAYOUT_W / 2 - leftShift;
   int topHeight = EPD_H - 60;
 
   // Font size for temperatures (78px Logisoso - numbers only)
   int tempFontSize = 78;
 
   // Center points for left and right columns within the left half
-  int leftCenter = LAYOUT_W / 4 - 10;
-  int rightCenter = LAYOUT_W * 3 / 4;
+  int leftCenter = LAYOUT_W / 4 - 10 - leftShift;
+  int rightCenter = LAYOUT_W * 3 / 4 - leftShift;
 
   // Top-left: Bern Temperature
   memset(buffer, 0, sizeof(buffer));
@@ -1391,7 +1396,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   // ---- Right half: Calendar events or useless fact ----
   {
     int rhX = 410;                      // start after IC gap (396 + 8 + margin)
-    int rhMaxX = EPD_W_VISIBLE - 8;     // 784, right margin
+    int rhMaxX = EPD_W_VISIBLE - 18;    // 774, right margin (10px padding from edge)
     int rhW = rhMaxX - rhX;             // ~374 usable width
     int rhY = 20;                       // top margin (aligned with temperature numbers)
 
@@ -1502,7 +1507,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
       if (isFiller) {
         // Bottom-aligned when used as filler below calendar events
         // Account for label height so text lines don't get pushed past the bottom margin
-        factStartY = EPD_H - bottomMargin - (lineCount * lineHeight) - labelHeight;
+        factStartY = EPD_H - bottomMargin - (lineCount * lineHeight) - labelHeight - 5;
         if (factStartY < rhY + 10) factStartY = rhY + 10;
       } else {
         // Vertically centered on the right half when no events exist
