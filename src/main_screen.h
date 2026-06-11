@@ -1494,8 +1494,9 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
       int factStartY;
       if (isFiller) {
         // Bottom-aligned when used as filler below calendar events
-        factStartY = EPD_H - bottomMargin - (lineCount * lineHeight);
-        if (factStartY < rhY + 10 + labelHeight) factStartY = rhY + 10 + labelHeight;
+        // Account for label height so text lines don't get pushed past the bottom margin
+        factStartY = EPD_H - bottomMargin - (lineCount * lineHeight) - labelHeight;
+        if (factStartY < rhY + 10) factStartY = rhY + 10;
       } else {
         // Vertically centered on the right half when no events exist
         int totalFactHeight = labelHeight + (lineCount * lineHeight);

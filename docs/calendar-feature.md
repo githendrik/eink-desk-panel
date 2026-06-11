@@ -93,14 +93,14 @@ Days with events are rendered top-down. Empty days are skipped entirely (no head
 +--------------------------------------+
 |                                      |
 |  Das Chupa Chups-Logo wurde          |  <- 20px font (14pt Helvetica)
-|  von Salvador Dali entworfen.        |  <- bottom-aligned, 25px margin
+|  von Salvador Dali entworfen.        |  <- vertically centered
 |                                      |
 +--------------------------------------+
 ```
 
 - Font size 20 (14pt Helvetica) when the fact is the sole content — more prominent
 - Word-wrapped to fit the right half width
-- Bottom-aligned with 25px bottom margin
+- Vertically centered on the right half
 
 ### Font Size Logic
 
