@@ -69,6 +69,7 @@ input{width:100%;padding:8px;margin-top:2px;border:1px solid #ccc;border-radius:
 <label>Bearer Token<input type="password" id="cal_token"></label>
 
 <h2>System Logging</h2>
+<label><input type="checkbox" id="d_enabled"> Enable Discord Integration</label>
 <label>Discord Webhook URL<input type="password" id="d_webhook"></label>
 <label>Remote Log Level
 <select id="d_loglevel">
@@ -115,6 +116,7 @@ function save(){
     g_pollen:document.getElementById('g_pollen').value,
     cal_url:document.getElementById('cal_url').value,
     cal_token:document.getElementById('cal_token').value,
+    d_enabled:document.getElementById('d_enabled').checked,
     d_webhook:document.getElementById('d_webhook').value,
     d_loglevel:parseInt(document.getElementById('d_loglevel').value),
     mdns_host:document.getElementById('mdns_host').value
@@ -176,6 +178,7 @@ fetch('/status').then(function(r){return r.json()}).then(function(j){
   if(j.g_pollen)document.getElementById('g_pollen').value=j.g_pollen;
   if(j.cal_url)document.getElementById('cal_url').value=j.cal_url;
   if(j.cal_token)document.getElementById('cal_token').value=j.cal_token;
+  if(j.d_enabled!==undefined)document.getElementById('d_enabled').checked=j.d_enabled;
   if(j.d_webhook)document.getElementById('d_webhook').value=j.d_webhook;
   if(j.d_loglevel!==undefined)document.getElementById('d_loglevel').value=j.d_loglevel;
   if(j.mdns_host)document.getElementById('mdns_host').value=j.mdns_host;
@@ -261,9 +264,11 @@ void setupWebDashboard() {
     }
 
     // System Logging
+    if (JSON.typeof(obj["d_enabled"]) != "undefined") {
+      config.discordEnabled = (bool)obj["d_enabled"];
+    }
     if (JSON.typeof(obj["d_webhook"]) != "undefined") {
-      String val = (const char*)obj["d_webhook"];
-      if (val.length() > 0) config.discordWebhookUrl = val;
+      config.discordWebhookUrl = (const char*)obj["d_webhook"];
     }
     if (JSON.typeof(obj["d_loglevel"]) != "undefined") {
       int val = (int)obj["d_loglevel"];
@@ -296,6 +301,7 @@ void setupWebDashboard() {
     json += "\"g_pollen\":\"" + config.googlePollenApiKey + "\",";
     json += "\"cal_url\":\"" + config.calendarApiUrl + "\",";
     json += "\"cal_token\":\"" + config.calendarBearerToken + "\",";
+    json += "\"d_enabled\":" + String(config.discordEnabled ? "true" : "false") + ",";
     json += "\"d_webhook\":\"" + config.discordWebhookUrl + "\",";
     json += "\"d_loglevel\":" + String(config.remoteLogLevel) + ",";
     json += "\"mdns_host\":\"" + config.mdnsHostname + "\"";

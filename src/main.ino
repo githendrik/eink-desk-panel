@@ -134,20 +134,10 @@ void setup() {
   esp_ota_mark_app_valid_cancel_rollback();
   Serial.println("App marked as valid (rollback cancelled)");
 
-  // OTA boot check (each panel looks for its own asset: firmware-42.bin or firmware-579.bin)
-  Serial.println("Checking for OTA update...");
+  // OTA progress callback (used when update is triggered via API)
   otaSetProgressCallback([](int percent) {
     display_ota_screen(ImageBW, lastUpdateInfo.version.c_str(), percent);
   });
-  lastUpdateInfo = otaCheckForUpdate();
-  if (lastUpdateInfo.available) {
-    display_ota_screen(ImageBW, lastUpdateInfo.version.c_str(), 0);
-    if (otaApplyUpdate(lastUpdateInfo)) {
-      Serial.println("OTA update applied, rebooting...");
-      delay(1000);
-      ESP.restart();
-    }
-  }
 
   fetch_weather_data();
   fetch_weight_data(httpResponseCode);

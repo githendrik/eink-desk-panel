@@ -37,8 +37,8 @@ void remote_log(LogLevel level, const String& module, const String& message) {
     return;
   }
 
-  // If no URL configured or WiFi down, skip
-  if (config.discordWebhookUrl.length() == 0 || WiFi.status() != WL_CONNECTED) {
+  // If Discord integration is disabled, no URL configured, or WiFi down, skip
+  if (!config.discordEnabled || config.discordWebhookUrl.length() == 0 || WiFi.status() != WL_CONNECTED) {
     return;
   }
 

@@ -34,10 +34,11 @@ public:
 
   // Misc
   String discordWebhookUrl;
+  bool discordEnabled;  // Toggle Discord integration on/off
   int remoteLogLevel;  // 0=DEBUG, 1=INFO, 2=WARN, 3=ERROR, 4=OFF
   String mdnsHostname;  // mDNS hostname (without .local)
 
-  ConfigManager() : firmwareVersion("0.0.0"), remoteLogLevel(3), mdnsHostname("eink-panel") {}  // Default: ERROR only, hostname eink-panel
+  ConfigManager() : firmwareVersion("0.0.0"), discordEnabled(false), remoteLogLevel(3), mdnsHostname("eink-panel") {}  // Default: Discord off, ERROR only, hostname eink-panel
 
   // Load all config from NVS
   void loadAll() {
@@ -74,6 +75,7 @@ public:
 
     prefs.begin("misc", true);
     discordWebhookUrl = prefs.getString("webhook", "");
+    discordEnabled = prefs.getBool("discord_on", false);
     remoteLogLevel = prefs.getInt("log_level", 3);  // Default: ERROR
     mdnsHostname = prefs.getString("mdns_host", "eink-panel");
     prefs.end();
@@ -144,6 +146,7 @@ public:
     Preferences prefs;
     prefs.begin("misc", false);
     prefs.putString("webhook", discordWebhookUrl);
+    prefs.putBool("discord_on", discordEnabled);
     prefs.putInt("log_level", remoteLogLevel);
     prefs.putString("mdns_host", mdnsHostname);
     prefs.end();
