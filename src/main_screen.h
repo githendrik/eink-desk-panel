@@ -1381,6 +1381,13 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   }
 
 #ifdef PANEL_579
+  // ---- Vertical separator between left and right halves ----
+  {
+    int sepX = 400;           // just past left-half boundary (inside the IC gap margin)
+    int sepPadY = 30;         // top and bottom padding
+    EPD_DrawLine(sepX, sepPadY, sepX, EPD_H - sepPadY, BLACK);
+  }
+
   // ---- Right half: Calendar events or useless fact ----
   {
     int rhX = 410;                      // start after IC gap (396 + 8 + margin)
@@ -1441,8 +1448,8 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     if (uselessFact.length() > 0 && rhY + 40 < EPD_H) {
       // Smaller font when used as filler below calendar events
       bool isFiller = (calendarTotalEvents > 0);
-      int lineHeight = isFiller ? 20 : 26;
-      int fontSize = isFiller ? 16 : 20;
+      int lineHeight = isFiller ? 22 : 26;
+      int fontSize = isFiller ? 18 : 20;
       int bottomMargin = 25;
       int maxLines = 8;
 
