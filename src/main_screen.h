@@ -1383,7 +1383,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
 #ifdef PANEL_579
   // ---- Vertical separator between left and right halves ----
   {
-    int sepX = 390;           // right edge of left half, just before the IC gap
+    int sepX = 380;           // right edge of left half, before the IC gap
     int sepPadY = 30;         // top and bottom padding
     EPD_DrawLine(sepX, sepPadY, sepX, EPD_H - sepPadY, BLACK);
   }
