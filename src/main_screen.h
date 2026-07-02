@@ -1450,79 +1450,83 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     // Show useless fact if there's remaining vertical space
     // (either no events at all, or after a short event list)
     // Bottom-aligned: word-wrap into lines first, then render from bottom up
-    if (uselessFact.length() > 0 && rhY + 40 < EPD_H) {
+    {
       // Smaller font when used as filler below calendar events
       bool isFiller = (calendarTotalEvents > 0);
       int lineHeight = isFiller ? 22 : 26;
       int fontSize = isFiller ? 18 : 20;
       int bottomMargin = 25;
       int maxLines = 8;
-
-      // First pass: word-wrap into line buffer
-      char factBuf[512];
-      strncpy(factBuf, uselessFact.c_str(), sizeof(factBuf) - 1);
-      factBuf[sizeof(factBuf) - 1] = '\0';
-
-      char lines[8][256];
-      int lineCount = 0;
-
-      char* remaining = factBuf;
-      while (*remaining && lineCount < maxLines) {
-        int len = strlen(remaining);
-        if (len > (int)sizeof(lines[0]) - 1) len = sizeof(lines[0]) - 1;
-        strncpy(lines[lineCount], remaining, len);
-        lines[lineCount][len] = '\0';
-
-        // Shrink until it fits the width
-        while (strlen(lines[lineCount]) > 0 && EPD_GetUTF8TextWidth(lines[lineCount], fontSize) > rhW) {
-          lines[lineCount][strlen(lines[lineCount]) - 1] = '\0';
-        }
-
-        int lineLen = strlen(lines[lineCount]);
-        if (lineLen == 0) break;
-
-        // If we truncated and the next char isn't a space/end, back up to last space
-        if (lineLen < (int)strlen(remaining) && remaining[lineLen] != ' ') {
-          int lastSpace = -1;
-          for (int j = lineLen - 1; j >= 0; j--) {
-            if (lines[lineCount][j] == ' ') { lastSpace = j; break; }
-          }
-          if (lastSpace > 0) {
-            lines[lineCount][lastSpace] = '\0';
-            lineLen = lastSpace;
-          }
-        }
-
-        lineCount++;
-        remaining += lineLen;
-        while (*remaining == ' ') remaining++;
-      }
-
-      // Second pass: position the fact text (including label above)
       int labelFontSize = 12;
-      int labelGap = 8;  // space between label and fact text
+      int labelGap = 8;
       int labelHeight = labelFontSize + labelGap;
 
-      int factStartY;
-      if (isFiller) {
-        // Bottom-aligned when used as filler below calendar events
-        // Account for label height so text lines don't get pushed past the bottom margin
-        factStartY = EPD_H - bottomMargin - (lineCount * lineHeight) - labelHeight - 5;
-        if (factStartY < rhY + 10) factStartY = rhY + 10;
-      } else {
-        // Vertically centered on the right half when no events exist
-        int totalFactHeight = labelHeight + (lineCount * lineHeight);
-        factStartY = (EPD_H - totalFactHeight) / 2;
-      }
+      // Need room for: label + gap + at least one line of fact text + bottom margin
+      int minRequired = labelHeight + lineHeight + bottomMargin;
 
-      // Draw label
-      EPD_ShowStringUTF8(rhX, factStartY, "Fun fact of the day", labelFontSize, BLACK);
-      factStartY += labelHeight;
+      if (uselessFact.length() > 0 && rhY + minRequired < EPD_H) {
 
-      for (int i = 0; i < lineCount; i++) {
-        int drawY = factStartY + (i * lineHeight);
-        if (drawY + lineHeight > EPD_H - bottomMargin) break;  // safety
-        EPD_ShowStringUTF8(rhX, drawY, lines[i], fontSize, BLACK);
+        // First pass: word-wrap into line buffer
+        char factBuf[512];
+        strncpy(factBuf, uselessFact.c_str(), sizeof(factBuf) - 1);
+        factBuf[sizeof(factBuf) - 1] = '\0';
+
+        char lines[8][256];
+        int lineCount = 0;
+
+        char* remaining = factBuf;
+        while (*remaining && lineCount < maxLines) {
+          int len = strlen(remaining);
+          if (len > (int)sizeof(lines[0]) - 1) len = sizeof(lines[0]) - 1;
+          strncpy(lines[lineCount], remaining, len);
+          lines[lineCount][len] = '\0';
+
+          // Shrink until it fits the width
+          while (strlen(lines[lineCount]) > 0 && EPD_GetUTF8TextWidth(lines[lineCount], fontSize) > rhW) {
+            lines[lineCount][strlen(lines[lineCount]) - 1] = '\0';
+          }
+
+          int lineLen = strlen(lines[lineCount]);
+          if (lineLen == 0) break;
+
+          // If we truncated and the next char isn't a space/end, back up to last space
+          if (lineLen < (int)strlen(remaining) && remaining[lineLen] != ' ') {
+            int lastSpace = -1;
+            for (int j = lineLen - 1; j >= 0; j--) {
+              if (lines[lineCount][j] == ' ') { lastSpace = j; break; }
+            }
+            if (lastSpace > 0) {
+              lines[lineCount][lastSpace] = '\0';
+              lineLen = lastSpace;
+            }
+          }
+
+          lineCount++;
+          remaining += lineLen;
+          while (*remaining == ' ') remaining++;
+        }
+
+        // Second pass: position the fact text (including label above)
+        int factStartY;
+        if (isFiller) {
+          // Bottom-aligned when used as filler below calendar events
+          factStartY = EPD_H - bottomMargin - (lineCount * lineHeight) - labelHeight - 5;
+          if (factStartY < rhY + 10) factStartY = rhY + 10;
+        } else {
+          // Vertically centered on the right half when no events exist
+          int totalFactHeight = labelHeight + (lineCount * lineHeight);
+          factStartY = (EPD_H - totalFactHeight) / 2;
+        }
+
+        // Draw label
+        EPD_ShowStringUTF8(rhX, factStartY, "Fun fact of the day", labelFontSize, BLACK);
+        factStartY += labelHeight;
+
+        for (int i = 0; i < lineCount; i++) {
+          int drawY = factStartY + (i * lineHeight);
+          if (drawY + lineHeight > EPD_H - bottomMargin) break;  // safety
+          EPD_ShowStringUTF8(rhX, drawY, lines[i], fontSize, BLACK);
+        }
       }
     }
   }
