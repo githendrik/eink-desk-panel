@@ -141,7 +141,6 @@ void setup() {
 
   fetch_weather_data();
   fetch_weight_data(httpResponseCode);
-  fetch_strava_data(httpResponseCode);
   fetch_calendar_data();
   #ifdef PANEL_579
   fetch_useless_fact();
@@ -155,7 +154,6 @@ void loop() {
   static unsigned long lastPollenFetch = 0;
   static unsigned long lastAareFetch = 0;
   static unsigned long lastWeightFetch = 0;
-  static unsigned long lastStravaFetch = 0;
   static unsigned long lastCalendarFetch = 0;
   static unsigned long lastFactFetch = 0;
 
@@ -262,7 +260,7 @@ void loop() {
     }
   }
 
-  // Rocker switch: toggle bottom-right between Strava (0) and Weight (1)
+  // Rocker switch: toggle bottom-right between UV index (0) and Weight (1)
   if (prvButtonPressed || nextButtonPressed) {
     prvButtonPressed = false;
     nextButtonPressed = false;
@@ -274,7 +272,7 @@ void loop() {
     } else {
       bottomRightMode = (bottomRightMode == 0) ? 1 : 0;
       Serial.print("Bottom-right mode: ");
-      Serial.println(bottomRightMode == 0 ? "Strava" : "Weight");
+      Serial.println(bottomRightMode == 0 ? "UV" : "Weight");
       forceFullRefresh = false;
       display_main_screen(ImageBW, forceFullRefresh);
     }
@@ -314,13 +312,6 @@ void loop() {
     Serial.println("Fetching weight data...");
     fetch_weight_data(httpResponseCode);
     lastWeightFetch = millis();
-    needsRedraw = true;
-  }
-
-  if (millis() - lastStravaFetch >= 1000UL*60*60) {
-    Serial.println("Fetching Strava data...");
-    fetch_strava_data(httpResponseCode);
-    lastStravaFetch = millis();
     needsRedraw = true;
   }
 

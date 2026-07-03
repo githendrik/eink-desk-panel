@@ -33,10 +33,7 @@ int uvIndexMax = 0; // Daily max UV index from Open-Meteo
 String weight = "--.-";
 String weightTrend = "n/a";
 
-String stravaActivity = "";      // e.g. "Run 5.2km" or "Ride 32km"
-String stravaActivityDate = "";  // e.g. "2h ago" or "3d ago"
-
-// Bottom-right display mode: 0 = strava (default for now), 1 = weight
+// Bottom-right display mode: 0 = UV index, 1 = weight
 int bottomRightMode = 1;
 
 // Calendar data
@@ -316,152 +313,6 @@ void fetch_weight_data(int& httpResponseCode, bool retry = true) {
     weightTrend = "err";
   }
 
-  http.end();
-}
-
-// --- Strava ---
-
-void fetch_strava_token(int& httpResponseCode) {
-  if (WiFi.status() != WL_CONNECTED) return;
-  
-  WiFiClientSecure client;
-  client.setInsecure();
-  HTTPClient http;
-  http.setTimeout(10000);
-  
-  http.begin(client, "https://www.strava.com/oauth/token");
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-  
-  String postData = "client_id=" + config.stravaClientId + 
-                    "&client_secret=" + config.stravaClientSecret +
-                    "&grant_type=refresh_token" +
-                    "&refresh_token=" + config.stravaRefreshToken;
-  
-  httpResponseCode = http.POST(postData);
-  
-  if (httpResponseCode == 200) {
-    String payload = http.getString();
-    remote_log(LOG_INFO, "Strava_Token", "Success");
-    Serial.println("Strava token response:");
-    Serial.println(payload);
-    
-    JSONVar tokenObject = JSON.parse(payload);
-    if (JSON.typeof(tokenObject) != "undefined") {
-      if (JSON.typeof(tokenObject["access_token"]) != "undefined") {
-        String token = JSON.stringify(tokenObject["access_token"]);
-        token.replace("\"", "");
-        config.stravaAccessToken = token;
-      }
-      if (JSON.typeof(tokenObject["refresh_token"]) != "undefined") {
-        String refresh = JSON.stringify(tokenObject["refresh_token"]);
-        refresh.replace("\"", "");
-        config.stravaRefreshToken = refresh;
-      }
-      config.saveStrava();
-      Serial.println("Strava token updated successfully");
-    }
-  } else {
-    remote_log(LOG_ERROR, "Strava_Token", "Error. HTTP: " + String(httpResponseCode));
-    Serial.print("Failed to refresh Strava token. HTTP code: ");
-    Serial.println(httpResponseCode);
-  }
-  
-  http.end();
-}
-
-String getActivityShortType(const String& type) {
-  if (type == "Run") return "Run";
-  if (type == "Ride") return "Ride";
-  if (type == "Swim") return "Swim";
-  if (type == "Walk") return "Walk";
-  if (type == "Hike") return "Hike";
-  if (type == "MountainBikeRide") return "MTB";
-  if (type == "GravelRide") return "Gravel";
-  if (type == "TrailRun") return "Trail";
-  if (type == "VirtualRide") return "Zwift";
-  if (type == "VirtualRun") return "VRun";
-  if (type == "WeightTraining") return "Gym";
-  if (type == "Yoga") return "Yoga";
-  return type.substring(0, 6);
-}
-
-void fetch_strava_data(int& httpResponseCode, bool retry = true) {
-  if (WiFi.status() != WL_CONNECTED) return;
-  
-  WiFiClientSecure client;
-  client.setInsecure();
-  HTTPClient http;
-  http.setTimeout(10000);
-  
-  http.begin(client, "https://www.strava.com/api/v3/athlete/activities?per_page=1&page=1");
-  http.addHeader("Authorization", "Bearer " + config.stravaAccessToken);
-  
-  httpResponseCode = http.GET();
-  remote_log(LOG_DEBUG, "Strava_Data", "API returned HTTP: " + String(httpResponseCode));
-  Serial.print("Strava HTTP code: ");
-  Serial.println(httpResponseCode);
-  
-  if (httpResponseCode == 200) {
-    String stravaBuffer = http.getString();
-    Serial.println(stravaBuffer);
-    JSONVar activities = JSON.parse(stravaBuffer);
-    
-    if (JSON.typeof(activities) != "undefined" && activities.length() > 0) {
-      String type = JSON.stringify(activities[0]["type"]);
-      type.replace("\"", "");
-      String shortType = getActivityShortType(type);
-      
-      double distance = (double)activities[0]["distance"];
-      double distKm = distance / 1000.0;
-      
-      if (distKm >= 1.0) {
-        stravaActivity = shortType + " " + String(distKm, 1) + "km";
-      } else {
-        stravaActivity = shortType + " " + String((int)distance) + "m";
-      }
-      
-      // Show date of activity
-      String startDate = JSON.stringify(activities[0]["start_date_local"]);
-      startDate.replace("\"", "");
-      // ISO 8601: "2026-05-12T07:30:00Z" -> "12 May"
-      if (startDate.length() >= 10) {
-        int month = startDate.substring(5, 7).toInt();
-        int day = startDate.substring(8, 10).toInt();
-        const char* months[] = {"", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-        if (month >= 1 && month <= 12) {
-          stravaActivityDate = String(day) + " " + months[month];
-        } else {
-          stravaActivityDate = startDate.substring(0, 10);
-        }
-      }
-      
-      Serial.print("Strava activity: ");
-      Serial.print(stravaActivity);
-      Serial.print(" (");
-      Serial.print(stravaActivityDate);
-      Serial.println(")");
-    } else {
-      stravaActivity = "No activity";
-      stravaActivityDate = "";
-    }
-  } else if (httpResponseCode == 401 && retry) {
-    Serial.println("Strava token expired, refreshing...");
-    http.end();
-    fetch_strava_token(httpResponseCode);
-    if (httpResponseCode == 200) {
-      fetch_strava_data(httpResponseCode, false);
-      return;
-    } else {
-      stravaActivity = "auth err";
-      stravaActivityDate = "";
-    }
-  } else {
-    Serial.print("Strava API error: ");
-    Serial.println(httpResponseCode);
-    stravaActivity = "err";
-    stravaActivityDate = "";
-  }
-  
   http.end();
 }
 
@@ -1321,7 +1172,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     EPD_ShowStringUTF8(midX - aareTextWidth / 2, aareTextY, aareTextBuf, 16, BLACK);
   }
 
-  // Bottom-left: Rain status > UV warning (>=6) > Pollen (priority order)
+  // Bottom-left: Rain status > Pollen (priority order)
   int bottomY = topHeight + 5;
   int bottomLeftCenter = leftCenter + 5; // nudge right to visually align with temperature above
   if (rainStatus.length() > 0) {
@@ -1334,20 +1185,6 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     snprintf(buffer, sizeof(buffer), "weather");
     int rainLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
     EPD_ShowStringUTF8(bottomLeftCenter - rainLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
-  } else if (uvIndexMax >= 8) {
-    const char* uvLabel;
-    if (uvIndexMax >= 11) uvLabel = "extreme";
-    else uvLabel = "very high";
-
-    memset(buffer, 0, sizeof(buffer));
-    snprintf(buffer, sizeof(buffer), "%s", uvLabel);
-    int uvWidth = EPD_GetUTF8TextWidth(buffer, 24);
-    EPD_ShowStringUTF8(bottomLeftCenter - uvWidth / 2, bottomY, buffer, 24, BLACK);
-    
-    memset(buffer, 0, sizeof(buffer));
-    snprintf(buffer, sizeof(buffer), "uv index");
-    int uvLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
-    EPD_ShowStringUTF8(bottomLeftCenter - uvLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
   } else {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", pollenLevel.c_str());
@@ -1360,19 +1197,24 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     EPD_ShowStringUTF8(bottomLeftCenter - pollenLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
   }
 
-  // Bottom-right (of left half): Strava or Weight
-  if (bottomRightMode == 0 && stravaActivity.length() > 0) {
+  // Bottom-right (of left half): UV index or Weight
+  if (bottomRightMode == 0) {
+    const char* uvLabel;
+    if (uvIndexMax >= 11) uvLabel = "extreme";
+    else if (uvIndexMax >= 8) uvLabel = "very high";
+    else if (uvIndexMax >= 6) uvLabel = "high";
+    else if (uvIndexMax >= 3) uvLabel = "moderate";
+    else uvLabel = "low";
+
     memset(buffer, 0, sizeof(buffer));
-    snprintf(buffer, sizeof(buffer), "%s", stravaActivity.c_str());
-    int stravaWidth = EPD_GetUTF8TextWidth(buffer, 24);
-    EPD_ShowStringUTF8(rightCenter - stravaWidth / 2, bottomY, buffer, 24, BLACK);
-    
-    if (stravaActivityDate.length() > 0) {
-      memset(buffer, 0, sizeof(buffer));
-      snprintf(buffer, sizeof(buffer), "%s", stravaActivityDate.c_str());
-      int dateWidth = EPD_GetUTF8TextWidth(buffer, 12);
-      EPD_ShowStringUTF8(rightCenter - dateWidth / 2, bottomY + 26, buffer, 12, BLACK);
-    }
+    snprintf(buffer, sizeof(buffer), "%d %s", uvIndexMax, uvLabel);
+    int uvWidth = EPD_GetUTF8TextWidth(buffer, 24);
+    EPD_ShowStringUTF8(rightCenter - uvWidth / 2, bottomY, buffer, 24, BLACK);
+
+    memset(buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer), "uv index");
+    int uvLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
+    EPD_ShowStringUTF8(rightCenter - uvLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
   } else {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s kg", weight.c_str());
