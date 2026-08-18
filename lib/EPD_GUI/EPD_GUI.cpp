@@ -6,6 +6,11 @@
 
 PAINT Paint;
 
+// Diagnostics: counts pixel writes rejected as out-of-bounds.
+uint32_t EPD_OOBWrites = 0;
+uint16_t EPD_OOBLastX = 0;
+uint16_t EPD_OOBLastY = 0;
+
 // Custom GFX class for our EPD buffer
 class EPD_GFX : public Adafruit_GFX {
   public:
@@ -106,6 +111,15 @@ void Paint_SetPixel(uint16_t Xpoint, uint16_t Ypoint, uint16_t Color)
       return;
   }
   Addr = X / 8 + Y * Paint.WidthByte;
+  // Guard: a coordinate outside the canvas would otherwise write past the
+  // framebuffer and silently corrupt adjacent memory.
+  if (X >= Paint.WidthMemory || Y >= Paint.HeightMemory ||
+      Addr >= (uint32_t)(Paint.WidthByte * Paint.HeightByte)) {
+    EPD_OOBWrites++;
+    EPD_OOBLastX = Xpoint;
+    EPD_OOBLastY = Ypoint;
+    return;
+  }
   Rdata = Paint.Image[Addr];
   if (Color == BLACK)
   {

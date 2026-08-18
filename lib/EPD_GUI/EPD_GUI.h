@@ -13,6 +13,9 @@ typedef struct {
   uint16_t HeightByte;
 } PAINT;
 extern PAINT Paint;
+extern uint32_t EPD_OOBWrites;
+extern uint16_t EPD_OOBLastX;
+extern uint16_t EPD_OOBLastY;
 
 #define ROTATE_0            0   //屏幕正向显示
 #define ROTATE_90           90  //屏幕旋转90度显示

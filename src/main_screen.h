@@ -24,6 +24,9 @@
 
 extern ConfigManager config;
 
+#define STRINGIFY_(x) #x
+#define STRINGIFY(x) STRINGIFY_(x)
+
 String temperature;
 String aareTemp;
 String aareText;
@@ -36,6 +39,56 @@ String weightTrend = "n/a";
 // Bottom-right display mode: 0 = UV index, 1 = weight
 int bottomRightMode = 1;
 
+// ---- Rich weather model (used by the 4.2" forecast layout) ----
+// The 5.79" layout keeps using the simple globals above; this struct carries
+// the extra Open-Meteo fields without changing that behaviour.
+#define WX_HOURS 12
+#define WX_DAYS  3
+
+struct WxNow {
+  int   temp;      // degC
+  int   feels;     // apparent temperature, degC
+  int   wind;      // km/h
+  int   humidity;  // %
+  int   code;      // WMO weather code
+  bool  isDay;
+};
+struct WxHour {
+  int hour;  // 0-23, local time
+  int temp;  // degC
+  int pop;   // precipitation probability, %
+  int code;  // WMO weather code
+};
+struct WxDay {
+  int tmin, tmax;  // degC
+  int pop;         // max precipitation probability, %
+  int code;        // WMO weather code
+  int wday;        // 0=Mon .. 6=Sun
+};
+struct WeatherData {
+  WxNow  now;
+  WxHour hours[WX_HOURS];
+  int    hourCount;
+  WxDay  days[WX_DAYS];
+  int    dayCount;
+  String sunrise;   // "HH:MM"
+  String sunset;    // "HH:MM"
+  int    todayYear;   // e.g. 2026
+  int    todayDay;    // day of month
+  int    todayMonth;  // 1-12
+  int    todayWday;   // 0=Mon .. 6=Sun
+  bool   valid;
+};
+WeatherData wx = {};
+
+// Sakamoto's algorithm. Returns 0=Mon .. 6=Sun.
+static int weekdayFromDate(int y, int m, int d) {
+  static const int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+  if (m < 3) y -= 1;
+  int dow = (y + y / 4 - y / 100 + y / 400 + t[m - 1] + d) % 7;  // 0=Sun
+  return (dow + 6) % 7;                                          // 0=Mon
+}
+
 // Calendar data
 struct CalendarEvent {
   String summary;
@@ -44,7 +97,7 @@ struct CalendarEvent {
 };
 struct CalendarDay {
   String label;      // "Today" or "Tomorrow"
-  CalendarEvent events[3];
+  CalendarEvent events[5];
   int eventCount;
 };
 CalendarDay calendarDays[2];  // [0]=today, [1]=tomorrow
@@ -329,10 +382,11 @@ bool fetch_openmeteo_data() {
   // Open-Meteo: weather + hourly forecast + daily UV in one call
   // Herrenschwanden coordinates: 46.9725, 7.4528
   String serverPath = "http://api.open-meteo.com/v1/forecast?latitude=46.9725&longitude=7.4528"
-    "&current=temperature_2m,weather_code"
-    "&hourly=weather_code"
-    "&daily=uv_index_max"
-    "&forecast_hours=8"
+    "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,is_day"
+    "&hourly=temperature_2m,precipitation_probability,weather_code"
+    "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max,sunrise,sunset"
+    "&forecast_hours=" STRINGIFY(WX_HOURS)
+    "&forecast_days=" STRINGIFY(WX_DAYS)
     "&timezone=Europe/Zurich";
   WiFiClient client;
   HTTPClient http;
@@ -418,6 +472,79 @@ bool fetch_openmeteo_data() {
           }
         }
       }
+    }
+
+    // ---- Rich model for the 4.2" forecast layout ----
+    {
+      JSONVar cur = myObject["current"];
+      wx.now.temp     = (int)round((double)cur["temperature_2m"]);
+      wx.now.feels    = (int)round((double)cur["apparent_temperature"]);
+      wx.now.wind     = (int)round((double)cur["wind_speed_10m"]);
+      wx.now.humidity = (int)round((double)cur["relative_humidity_2m"]);
+      wx.now.code     = weatherCode;
+      wx.now.isDay    = ((int)(double)cur["is_day"]) != 0;
+
+      // Hourly: temperature / precipitation probability / condition
+      JSONVar hTime = myObject["hourly"]["time"];
+      JSONVar hTemp = myObject["hourly"]["temperature_2m"];
+      JSONVar hPop  = myObject["hourly"]["precipitation_probability"];
+      JSONVar hCode = myObject["hourly"]["weather_code"];
+      wx.hourCount = 0;
+      if (JSON.typeof(hTime) != "undefined") {
+        int n = hTime.length();
+        if (n > WX_HOURS) n = WX_HOURS;
+        for (int i = 0; i < n; i++) {
+          // "2026-08-16T20:00" -> hour 20
+          String ts = (const char*)hTime[i];
+          int tPos = ts.indexOf('T');
+          wx.hours[i].hour = (tPos >= 0) ? ts.substring(tPos + 1, tPos + 3).toInt() : 0;
+          wx.hours[i].temp = (int)round((double)hTemp[i]);
+          wx.hours[i].pop  = (JSON.typeof(hPop[i]) != "undefined")
+                             ? (int)round((double)hPop[i]) : 0;
+          wx.hours[i].code = (int)(double)hCode[i];
+          wx.hourCount++;
+        }
+      }
+
+      // Daily: min/max, precipitation probability, condition
+      JSONVar dTime = myObject["daily"]["time"];
+      wx.dayCount = 0;
+      if (JSON.typeof(dTime) != "undefined") {
+        int n = dTime.length();
+        if (n > WX_DAYS) n = WX_DAYS;
+        for (int i = 0; i < n; i++) {
+          String ds = (const char*)dTime[i];  // "YYYY-MM-DD"
+          int yy = ds.substring(0, 4).toInt();
+          int mm = ds.substring(5, 7).toInt();
+          int dd = ds.substring(8, 10).toInt();
+          wx.days[i].wday = weekdayFromDate(yy, mm, dd);
+          wx.days[i].tmax = (int)round((double)myObject["daily"]["temperature_2m_max"][i]);
+          wx.days[i].tmin = (int)round((double)myObject["daily"]["temperature_2m_min"][i]);
+          wx.days[i].code = (int)(double)myObject["daily"]["weather_code"][i];
+          wx.days[i].pop  = (int)round((double)myObject["daily"]["precipitation_probability_max"][i]);
+          wx.dayCount++;
+          if (i == 0) {
+            wx.todayYear  = yy;
+            wx.todayDay   = dd;
+            wx.todayMonth = mm;
+            wx.todayWday  = wx.days[0].wday;
+          }
+        }
+      }
+
+      // Sunrise / sunset for today ("2026-08-16T06:28" -> "06:28")
+      if (JSON.typeof(myObject["daily"]["sunrise"][0]) != "undefined") {
+        String s = (const char*)myObject["daily"]["sunrise"][0];
+        int tPos = s.indexOf('T');
+        if (tPos >= 0) wx.sunrise = s.substring(tPos + 1, tPos + 6);
+      }
+      if (JSON.typeof(myObject["daily"]["sunset"][0]) != "undefined") {
+        String s = (const char*)myObject["daily"]["sunset"][0];
+        int tPos = s.indexOf('T');
+        if (tPos >= 0) wx.sunset = s.substring(tPos + 1, tPos + 6);
+      }
+
+      wx.valid = true;
     }
 
     Serial.print("Temperature: ");
@@ -645,7 +772,7 @@ bool fetch_calendar_data() {
 
       if (JSON.typeof(day["events"]) != "undefined") {
         int count = day["events"].length();
-        if (count > 3) count = 3;  // max 3 events per day
+        if (count > 5) count = 5;  // max 5 events per day (renderers cap further)
 
         for (int i = 0; i < count; i++) {
           JSONVar ev = day["events"][i];
@@ -682,15 +809,6 @@ bool fetch_calendar_data() {
     remote_log(LOG_INFO, "Calendar", "Success. Events: " + String(calendarTotalEvents));
     http.end();
     calendarFailCount = 0;
-
-    // If no events, fetch a useless fact (for 4.2" panel fallback)
-    #ifndef PANEL_579
-    if (calendarTotalEvents == 0) {
-      fetch_useless_fact();
-    } else {
-      uselessFact = "";
-    }
-    #endif
 
     return true;
   } else {
@@ -740,6 +858,10 @@ void fetch_weather_data() {
   fetch_pollen_data();
   fetch_aare_data();
 }
+
+#ifndef PANEL_579
+#include "screen_42.h"   // 4.2" forecast layout (needs wx / calendarDays above)
+#endif
 
 
 
@@ -1100,9 +1222,6 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   // ---- Layout ----
 #ifdef PANEL_579
   int leftShift = 10;  // shift left-half content left to balance with separator
-#else
-  int leftShift = 0;
-#endif
   int midX = LAYOUT_W / 2 - leftShift;
   int topHeight = EPD_H - 60;
 
@@ -1164,11 +1283,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
       aareTextBuf[strlen(aareTextBuf) - 1] = '\0';
     }
     int aareTextWidth = EPD_GetUTF8TextWidth(aareTextBuf, 16);
-#ifdef PANEL_579
     int aareTextY = 155;
-#else
-    int aareTextY = 180;
-#endif
     EPD_ShowStringUTF8(midX - aareTextWidth / 2, aareTextY, aareTextBuf, 16, BLACK);
   }
 
@@ -1262,8 +1377,10 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
           rhY += headerLineHeight + headerPadding;
         }
 
-        // Events
-        for (int i = 0; i < calendarDays[d].eventCount; i++) {
+        // Events (capped: the right half has room for ~3 per day)
+        int shown = calendarDays[d].eventCount;
+        if (shown > 3) shown = 3;
+        for (int i = 0; i < shown; i++) {
           CalendarEvent& ev = calendarDays[d].events[i];
 
           if (ev.allDay) {
@@ -1372,6 +1489,11 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
       }
     }
   }
+#endif  // right half (5.79")
+#else
+  // ---- 4.2": dedicated forecast + calendar layout ----
+  (void)buffer;
+  draw_layout_42();
 #endif
 
   // Push composed buffer to display using partial update
