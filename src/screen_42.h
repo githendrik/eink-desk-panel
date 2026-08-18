@@ -8,9 +8,9 @@
 // temperature, pollen, UV and weight widgets in favour of a readable multi-hour
 // and multi-day forecast, with the shared calendar filling the bottom band.
 //
-//   y   0..164   calendar: full date header, then today's and tomorrow's events
-//   y 168        divider
-//   y 172..296   weather: big temperature, condition icon, detail column,
+//   y   0..160   calendar: full date header, then today's and tomorrow's events
+//   y 166        divider
+//   y 183..295   weather: big temperature, condition icon, detail column,
 //                then two forecast entries (in 2h, tomorrow)
 // ---------------------------------------------------------------------------
 
@@ -126,7 +126,7 @@ void draw_layout_42() {
     const int sumMaxW = R - sumX;
     const int pitch   = 20;
     const int perDay  = 3;        // hard cap so the band cannot overflow
-    int y = 42;
+    int y = 40;
 
     // Header: full date, e.g. "Montag, 17. August 2026"
     if (wx.valid) {
@@ -164,7 +164,7 @@ void draw_layout_42() {
     }
   }
 
-  EPD_DrawLine(L, 168, R, 168, BLACK);
+  EPD_DrawLine(L, 166, R, 166, BLACK);
 
   // ===== Weather (bottom half) ======================================
   if (wx.valid) {
@@ -173,15 +173,15 @@ void draw_layout_42() {
     // the visible top of the digits.
     snprintf(buf, sizeof(buf), "%d", wx.now.temp);
     int tw = EPD_GetUTF8TextWidth(buf, 78);
-    s42_text(L + 8, 162, buf, 78);
-    s42_text(L + 8 + tw + 4, 170, "o", 24);
+    s42_text(L + 8, 167, buf, 78);
+    s42_text(L + 8 + tw + 4, 175, "o", 24);
 
     // Condition icon
-    s42_icon(152, 182, 48, wx.now.code, wx.now.isDay);
+    s42_icon(152, 187, 48, wx.now.code, wx.now.isDay);
 
     // Detail column
     const int dx = 228;
-    int dy = 176;
+    int dy = 181;
     const int pitch = 22;
 
     snprintf(buf, sizeof(buf), "%d\u00b0/%d\u00b0", wx.days[0].tmin, wx.days[0].tmax);
@@ -199,17 +199,17 @@ void draw_layout_42() {
     if (wx.hourCount > 2) {
       const WxHour& h = wx.hours[2];
       snprintf(buf, sizeof(buf), "In 2h:  %d\u00b0", h.temp);
-      s42_text(L + 4, 248, buf, 16);
-      s42_icon(L + 4, 270, 24, h.code, h.hour >= 7 && h.hour < 21);
-      s42_text(L + 36, 274, wmoTextDe(h.code), 16);
+      s42_text(L + 4, 249, buf, 16);
+      s42_icon(L + 4, 271, 24, h.code, h.hour >= 7 && h.hour < 21);
+      s42_text(L + 36, 275, wmoTextDe(h.code), 16);
     }
 
     if (wx.dayCount > 1) {
       const WxDay& d = wx.days[1];
       snprintf(buf, sizeof(buf), "Morgen:  %d\u00b0", d.tmax);
-      s42_text(halfX, 248, buf, 16);
-      s42_icon(halfX, 270, 24, d.code, true);
-      s42_text(halfX + 32, 274, wmoTextDe(d.code), 16);
+      s42_text(halfX, 249, buf, 16);
+      s42_icon(halfX, 271, 24, d.code, true);
+      s42_text(halfX + 32, 275, wmoTextDe(d.code), 16);
     }
   }
 }

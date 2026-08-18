@@ -14,9 +14,9 @@ Withings weight, and the fun fact.
 
 | y | Content |
 |---|---|
-| 0..164 | Calendar: full date header, then today's and tomorrow's events |
-| 168 | Divider |
-| 172..296 | Weather: big temperature, condition icon, detail column, two forecast entries |
+| 0..159 | Calendar: full date header, then today's and tomorrow's events |
+| 166 | Divider (17px clearance below, 7px above in the 6-event worst case) |
+| 183..296 | Weather: big temperature, condition icon, detail column, two forecast entries |
 
 ```
  Montag, 17. August 2026
@@ -38,7 +38,7 @@ Withings weight, and the fun fact.
 
 Day labels sit in a left gutter (x=10) so that adding the "Morgen" section
 costs no extra rows. Columns: gutter (font 12), time at x=72, title at x=130.
-Rows are 20px apart starting at y=42.
+Rows are 20px apart starting at y=40.
 
 The renderer caps each day at **3 events**, so the worst case is 6 rows and the
 band cannot overflow even if the calendar API's `max_events` is raised. When
