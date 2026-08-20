@@ -139,19 +139,19 @@ void draw_layout_42() {
       s42_textRight(R, 14, "veraltet", 12);
     }
 
-    // Today
-    int nToday = calendarDays[0].eventCount;
-    if (nToday > perDay) nToday = perDay;
-    if (nToday == 0) {
-      s42_text(gutterX, y + 4, "Heute", 12);
-      s42_text(timeX, y, "keine Termine", 16);
+    // Today, skipping events that have already finished
+    int shown = 0, hidden = 0;
+    for (int i = 0; i < calendarDays[0].eventCount && shown < perDay; i++) {
+      const CalendarEvent& ev = calendarDays[0].events[i];
+      if (calendarEventIsPast(ev)) { hidden++; continue; }
+      s42_calRow(y, shown == 0 ? "Heute" : "", ev, gutterX, timeX, sumX, sumMaxW);
       y += pitch;
-    } else {
-      for (int i = 0; i < nToday; i++) {
-        s42_calRow(y, i == 0 ? "Heute" : "", calendarDays[0].events[i],
-                   gutterX, timeX, sumX, sumMaxW);
-        y += pitch;
-      }
+      shown++;
+    }
+    if (shown == 0) {
+      s42_text(gutterX, y + 4, "Heute", 12);
+      s42_text(timeX, y, hidden > 0 ? "keine Termine mehr" : "keine Termine", 16);
+      y += pitch;
     }
 
     // Tomorrow (only when there is something to show)

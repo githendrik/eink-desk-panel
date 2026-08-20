@@ -81,6 +81,25 @@ struct WeatherData {
 };
 WeatherData wx = {};
 
+// "2026-08-17T08:00:00" -> minutes since midnight (488). -1 if unparseable.
+static int isoTimeToMinutes(const String& iso) {
+  int t = iso.indexOf('T');
+  if (t < 0 || (int)iso.length() < t + 6) return -1;
+  int hh = iso.substring(t + 1, t + 3).toInt();
+  int mm = iso.substring(t + 4, t + 6).toInt();
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return -1;
+  return hh * 60 + mm;
+}
+
+// Minutes since local midnight, or -1 while the clock is not yet set.
+static int localMinutesNow() {
+  time_t now = time(NULL);
+  if (now < 1000000000) return -1;
+  struct tm tmv;
+  localtime_r(&now, &tmv);
+  return tmv.tm_hour * 60 + tmv.tm_min;
+}
+
 // Sakamoto's algorithm. Returns 0=Mon .. 6=Sun.
 static int weekdayFromDate(int y, int m, int d) {
   static const int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
@@ -94,6 +113,8 @@ struct CalendarEvent {
   String summary;
   String startTime;  // "HH:MM" or "" for all-day
   bool allDay;
+  int startMin;      // minutes since local midnight, -1 if unknown
+  int endMin;        // minutes since local midnight, -1 if unknown
 };
 struct CalendarDay {
   String label;      // "Today" or "Tomorrow"
@@ -101,6 +122,22 @@ struct CalendarDay {
   int eventCount;
 };
 CalendarDay calendarDays[2];  // [0]=today, [1]=tomorrow
+
+// True once a timed event scheduled for *today* has finished. All-day events
+// never count as past. If the clock is not set we show everything rather than
+// risk hiding upcoming events.
+static bool calendarEventIsPast(const CalendarEvent& ev) {
+  if (ev.allDay) return false;
+  int nowMin = localMinutesNow();
+  if (nowMin < 0) return false;
+  int endMin = ev.endMin;
+  if (endMin < 0) {
+    if (ev.startMin < 0) return false;
+    endMin = ev.startMin + 60;   // no end given: assume an hour
+  }
+  return endMin <= nowMin;
+}
+
 int calendarTotalEvents = 0;
 String uselessFact = "";
 int calendarFailCount = 0;
@@ -779,6 +816,8 @@ bool fetch_calendar_data() {
           calendarDays[d].events[i].summary = "";
           calendarDays[d].events[i].startTime = "";
           calendarDays[d].events[i].allDay = false;
+          calendarDays[d].events[i].startMin = -1;
+          calendarDays[d].events[i].endMin = -1;
 
           if (JSON.typeof(ev["summary"]) != "undefined") {
             calendarDays[d].events[i].summary = (const char*)ev["summary"];
@@ -795,6 +834,11 @@ bool fetch_calendar_data() {
             if (tPos >= 0 && start.length() >= tPos + 6) {
               calendarDays[d].events[i].startTime = start.substring(tPos + 1, tPos + 6);
             }
+            calendarDays[d].events[i].startMin = isoTimeToMinutes(start);
+          }
+
+          if (!calendarDays[d].events[i].allDay && JSON.typeof(ev["end"]) != "undefined") {
+            calendarDays[d].events[i].endMin = isoTimeToMinutes((const char*)ev["end"]);
           }
 
           calendarDays[d].eventCount++;
@@ -866,6 +910,114 @@ void fetch_weather_data() {
 
 
 
+
+
+// ---- E-ink refresh tracking ---------------------------------------------
+// The controller does differential (partial) updates against whatever we last
+// told it is on the panel ("OLD RAM"). If any other screen paints the panel
+// without updating this copy, the next partial update computes the wrong
+// transitions and the old content bleeds through. So every screen that paints
+// must either refresh this buffer or invalidate it.
+static uint8_t* epdPrevFrame = nullptr;
+static bool epdPrevFrameValid = false;
+
+// Force the next main-screen draw to do a full refresh. Call this from any
+// other screen that paints the panel.
+static void epdInvalidatePrevFrame() { epdPrevFrameValid = false; }
+
+static void epdEnsurePrevFrame(int frameSize) {
+  if (epdPrevFrame != nullptr) return;
+#ifdef PANEL_579
+  epdPrevFrame = (uint8_t*)ps_malloc(frameSize);
+#else
+  epdPrevFrame = (uint8_t*)malloc(frameSize);
+#endif
+  if (epdPrevFrame != nullptr) memset(epdPrevFrame, 0xFF, frameSize);
+  epdPrevFrameValid = false;   // panel contents unknown until we paint
+}
+
+// Full refresh policy: at most this many partial updates in a row, and never
+// longer than this between full refreshes. Partial updates are cheap and
+// flicker-free but accumulate ghosting, so they need bounding on both axes.
+#define EPD_MAX_PARTIAL_UPDATES 4
+#define EPD_FULL_REFRESH_INTERVAL_MS (1000UL * 60 * 60)   // 1 hour
+#define EPD_BIG_CHANGE_PERCENT 10
+
+// Push an already-composed frame, choosing a full or partial update.
+static void epdPushFrame(uint8_t* ImageBW, int frameSize, bool& forceFullRefresh) {
+  static int partialCount = 0;
+  static unsigned long lastFullMs = 0;
+  unsigned long nowMs = millis();
+
+  // How much of the frame actually changed?
+  uint32_t changed = 0;
+  if (epdPrevFrameValid && epdPrevFrame != nullptr) {
+    for (int i = 0; i < frameSize; i++) {
+      if (epdPrevFrame[i] != ImageBW[i]) changed++;
+    }
+  }
+  bool bigChange = (changed * 100UL) >= ((uint32_t)frameSize * EPD_BIG_CHANGE_PERCENT);
+  bool overdue   = (lastFullMs == 0) || (nowMs - lastFullMs >= EPD_FULL_REFRESH_INTERVAL_MS);
+
+  bool doFull = forceFullRefresh
+             || !epdPrevFrameValid            // panel shows something we did not draw
+             || partialCount >= EPD_MAX_PARTIAL_UPDATES
+             || bigChange
+             || overdue;
+
+  if (doFull) {
+    Serial.printf("EPD: full refresh (forced=%d valid=%d partials=%d changed=%lu%% overdue=%d)\n",
+                  (int)forceFullRefresh, (int)epdPrevFrameValid, partialCount,
+                  (unsigned long)(frameSize ? (changed * 100UL / frameSize) : 0), (int)overdue);
+    EPD_Init();
+    EPD_Clear();
+    EPD_Display_Fast(ImageBW);
+    partialCount = 0;
+    lastFullMs = nowMs;
+  } else {
+    EPD_Init_Fast(Fast_Seconds_1_5s);
+
+    // Tell the controller what is currently on the panel.
+#ifdef PANEL_579
+    EPD_SetRAMMP();
+    EPD_SetRAMMA();
+    EPD_WR_REG(0x26);
+    {
+      uint32_t tempcol = 0, templine = 0;
+      const uint16_t rowBytes = SOURCE_BYTES * 2;
+      for (uint32_t i = 0; i < IC_BYTES; i++) {
+        EPD_WR_DATA8(*(epdPrevFrame + templine * rowBytes + tempcol));
+        templine++;
+        if (templine >= GATE_BITS) { tempcol++; templine = 0; }
+      }
+    }
+    EPD_SetRAMSP();
+    EPD_SetRAMSA();
+    EPD_WR_REG(0xA6);
+    {
+      uint32_t tempcol = SOURCE_BYTES, templine = 0;
+      const uint16_t rowBytes = SOURCE_BYTES * 2;
+      for (uint32_t i = 0; i < IC_BYTES; i++) {
+        EPD_WR_DATA8(*(epdPrevFrame + templine * rowBytes + tempcol));
+        templine++;
+        if (templine >= GATE_BITS) { tempcol++; templine = 0; }
+      }
+    }
+#else
+    EPD_Address_Set(0, 0, EPD_W - 1, EPD_H - 1);
+    EPD_SetCursor(0, 0);
+    EPD_WR_REG(0x26);
+    for (int i = 0; i < frameSize; i++) EPD_WR_DATA8(epdPrevFrame[i]);
+#endif
+
+    EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
+    partialCount++;
+  }
+
+  forceFullRefresh = false;
+  if (epdPrevFrame != nullptr) memcpy(epdPrevFrame, ImageBW, frameSize);
+  epdPrevFrameValid = true;
+}
 
 // ---- Status Screen ----
 // otaStateText: 0=idle, 1=checking, 2=update available, 3=no update
@@ -975,6 +1127,7 @@ void display_status_screen(uint8_t* ImageBW, int otaState, const char* otaVersio
   EPD_ShowStringUTF8(midX - footW / 2, EPD_H - 18, footer, 12, BLACK);
 
   EPD_Display_Fast(ImageBW);
+  epdInvalidatePrevFrame();   // panel no longer shows the main screen
 }
 
 // ---- OTA Update Progress Screen ----
@@ -1049,6 +1202,7 @@ void display_ota_screen(uint8_t* ImageBW, const char* version, int percent) {
     // Full partial update (dual-IC doesn't support windowed partial easily)
     EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
   }
+  epdInvalidatePrevFrame();   // panel no longer shows the main screen
 }
 
 // ---- AP / Captive Portal Screen ----
@@ -1131,93 +1285,19 @@ void display_ap_screen(uint8_t* ImageBW, const char* ssid, const char* ip) {
   EPD_ShowStringUTF8(textX, y, step3, 16, BLACK);
 
   EPD_Display_Fast(ImageBW);
+  epdInvalidatePrevFrame();   // panel no longer shows the main screen
 }
 
 void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   static char buffer[64];
-  static int refreshCount = 0;
-  static uint8_t* prevFrame = nullptr;
   const int frameSize = EPD_BUF_SIZE;
 
-  // Allocate previous frame buffer once
-  if (prevFrame == nullptr) {
-#ifdef PANEL_579
-    prevFrame = (uint8_t*)ps_malloc(frameSize);
-#else
-    prevFrame = (uint8_t*)malloc(frameSize);
-#endif
-    if (prevFrame != nullptr) {
-      memset(prevFrame, 0xFF, frameSize);  // assume white on first boot
-    }
-  }
+  epdEnsurePrevFrame(frameSize);
 
-  // Every 10th refresh, do a full clear to prevent DC bias / ghosting buildup
-  if (forceFullRefresh || refreshCount >= 10) {
-    EPD_Init();
-    EPD_Clear();
-    forceFullRefresh = false;
-    refreshCount = 0;
-    if (prevFrame != nullptr) {
-      memset(prevFrame, 0xFF, frameSize);
-    }
-  }
-
-  refreshCount++;
-
-  EPD_Init_Fast(Fast_Seconds_1_5s);
-  
-  // Prepare buffer in RAM (no visible flash)
+  // Compose the frame in RAM only; no panel I/O until epdPushFrame() decides
+  // between a full and a partial update based on what actually changed.
   Paint_NewImage(ImageBW, EPD_W, EPD_H, PANEL_ROTATION, WHITE);
-  EPD_Full(WHITE);  // fills software buffer only
-
-  // Write previous frame to OLD RAM so the controller
-  // knows exactly what's currently on the physical display
-#ifdef PANEL_579
-  EPD_SetRAMMP();
-  EPD_SetRAMMA();
-  EPD_WR_REG(0x26);
-  if (prevFrame != nullptr) {
-    uint32_t tempcol = 0;
-    uint32_t templine = 0;
-    const uint16_t rowBytes = SOURCE_BYTES * 2;
-    for (uint32_t i = 0; i < IC_BYTES; i++) {
-      EPD_WR_DATA8(*(prevFrame + templine * rowBytes + tempcol));
-      templine++;
-      if (templine >= GATE_BITS) { tempcol++; templine = 0; }
-    }
-  } else {
-    for (uint32_t i = 0; i < IC_BYTES; i++) EPD_WR_DATA8(0xFF);
-  }
-
-  EPD_SetRAMSP();
-  EPD_SetRAMSA();
-  EPD_WR_REG(0xA6);
-  if (prevFrame != nullptr) {
-    uint32_t tempcol = SOURCE_BYTES;
-    uint32_t templine = 0;
-    const uint16_t rowBytes = SOURCE_BYTES * 2;
-    for (uint32_t i = 0; i < IC_BYTES; i++) {
-      EPD_WR_DATA8(*(prevFrame + templine * rowBytes + tempcol));
-      templine++;
-      if (templine >= GATE_BITS) { tempcol++; templine = 0; }
-    }
-  } else {
-    for (uint32_t i = 0; i < IC_BYTES; i++) EPD_WR_DATA8(0xFF);
-  }
-#else
-  EPD_Address_Set(0, 0, EPD_W - 1, EPD_H - 1);
-  EPD_SetCursor(0, 0);
-  EPD_WR_REG(0x26);
-  if (prevFrame != nullptr) {
-    for (int i = 0; i < frameSize; i++) {
-      EPD_WR_DATA8(prevFrame[i]);
-    }
-  } else {
-    for (int i = 0; i < frameSize; i++) {
-      EPD_WR_DATA8(0xFF);
-    }
-  }
-#endif
+  EPD_Full(WHITE);
 
   // ---- Layout ----
 #ifdef PANEL_579
@@ -1496,13 +1576,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   draw_layout_42();
 #endif
 
-  // Push composed buffer to display using partial update
-  EPD_Display_Part(0, 0, EPD_W, EPD_H, ImageBW);
-
-  // Save current frame as previous for next update
-  if (prevFrame != nullptr) {
-    memcpy(prevFrame, ImageBW, frameSize);
-  }
+  epdPushFrame(ImageBW, frameSize, forceFullRefresh);
 }
 
 #endif

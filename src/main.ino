@@ -119,7 +119,10 @@ void setup() {
 
   setupWebDashboard();
 
-  configTime(0, 3600, "pool.ntp.org", "time.nist.gov");
+  // Europe/Zurich with DST rules (CET/CEST). The previous fixed UTC+1 offset
+  // was an hour off for the whole summer, which matters now that the calendar
+  // hides events whose end time has passed.
+  configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.nist.gov");
   Serial.println("Waiting for NTP time...");
   time_t now = time(NULL);
   unsigned long ntpStart = millis();

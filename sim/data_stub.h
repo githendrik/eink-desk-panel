@@ -17,7 +17,19 @@ struct WeatherData {
   bool valid;
 };
 
-struct CalendarEvent { String summary, startTime; bool allDay; };
+struct CalendarEvent { String summary, startTime; bool allDay; int startMin, endMin; };
+
+// Sim: pretend "now" is SIM_NOW_MIN minutes past midnight (-1 = clock unset).
+#ifndef SIM_NOW_MIN
+#define SIM_NOW_MIN (13 * 60)
+#endif
+static bool calendarEventIsPast(const CalendarEvent& ev) {
+  if (ev.allDay) return false;
+  if (SIM_NOW_MIN < 0) return false;
+  int endMin = ev.endMin;
+  if (endMin < 0) { if (ev.startMin < 0) return false; endMin = ev.startMin + 60; }
+  return endMin <= SIM_NOW_MIN;
+}
 struct CalendarDay   { String label; CalendarEvent events[5]; int eventCount; };
 
 static WeatherData wx = {
@@ -34,10 +46,10 @@ static WeatherData wx = {
 };
 
 static CalendarDay calendarDays[2] = {
-  { "Today",    {{"Termin ganzer Tag","",true},
-                 {"Sp\u00fclung Abwasserleitung","08:00",false},
-                 {"Elterncaf\u00e9 Plus!","18:30",false}}, 3 },
-  { "Tomorrow", {{"Turnen Kinder","10:00",false}}, 1 }
+  { "Today",    {{"Termin ganzer Tag","",true,-1,-1},
+                 {"Sp\u00fclung Abwasserleitung","08:00",false,480,720},
+                 {"Elterncaf\u00e9 Plus!","18:30",false,1110,1200}}, 3 },
+  { "Tomorrow", {{"Turnen Kinder","10:00",false,600,660}}, 1 }
 };
 static int calendarTotalEvents = 4;
 

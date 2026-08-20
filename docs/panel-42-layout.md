@@ -40,6 +40,12 @@ Day labels sit in a left gutter (x=10) so that adding the "Morgen" section
 costs no extra rows. Columns: gutter (font 12), time at x=72, title at x=130.
 Rows are 20px apart starting at y=40.
 
+Timed events that have already finished are hidden from *today* once their end
+time passes (all-day events always stay). If every event today is over, the row
+reads `keine Termine mehr` instead of `keine Termine`. This relies on the device
+clock, which is set from NTP using the Europe/Zurich DST rule; while the clock
+is unset, nothing is hidden.
+
 The renderer caps each day at **3 events**, so the worst case is 6 rows and the
 band cannot overflow even if the calendar API's `max_events` is raised. When
 today has no events, a single `Heute — keine Termine` row is shown; the
@@ -70,3 +76,25 @@ make open
 
 Edit `sim/data_stub.h` to preview other states (no events, 3+3 events, negative
 temperatures, long titles).
+
+## Refresh strategy
+
+E-ink partial updates are differential: the controller compares the new frame
+against what we last told it is on the panel (its "OLD RAM"). `epdPrevFrame` in
+`src/main_screen.h` holds that copy.
+
+Any screen that paints the panel without refreshing that copy must call
+`epdInvalidatePrevFrame()`, otherwise the next partial update diffs against a
+frame that is no longer on screen and the old content bleeds through — this
+caused visible overlapping after visiting the status or OTA screen.
+
+A full refresh (clear + `EPD_Display_Fast`) is forced when any of these hold:
+
+- `forceFullRefresh` was requested,
+- the previous frame is invalid (another screen painted last),
+- more than `EPD_MAX_PARTIAL_UPDATES` (4) partial updates in a row,
+- at least `EPD_BIG_CHANGE_PERCENT` (10%) of the frame changed,
+- more than `EPD_FULL_REFRESH_INTERVAL_MS` (1 hour) since the last full refresh.
+
+Otherwise a partial update is used. The frame is always composed in RAM first,
+so the full/partial decision can be based on what actually changed.
