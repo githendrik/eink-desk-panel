@@ -1444,10 +1444,23 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     int eventLineHeight = 30;           // vertical advance after each event
     int daySectionGap = 14;             // spacing between day sections
 
+    int calendarRowsRendered = 0;
     if (calendarTotalEvents > 0) {
       // Render calendar events
       for (int d = 0; d < 2; d++) {
         if (calendarDays[d].eventCount == 0) continue;
+
+        // Pick what to show first: today's finished events are skipped, so a
+        // day whose events are all over is dropped along with its header.
+        // (Capped: the right half has room for ~3 per day.)
+        CalendarEvent* visible[3];
+        int visibleCount = 0;
+        for (int i = 0; i < calendarDays[d].eventCount && visibleCount < 3; i++) {
+          CalendarEvent& ev = calendarDays[d].events[i];
+          if (d == 0 && calendarEventIsPast(ev)) continue;
+          visible[visibleCount++] = &ev;
+        }
+        if (visibleCount == 0) continue;
 
         // Day header ("Today" / "Tomorrow")
         if (calendarDays[d].label.length() > 0) {
@@ -1457,11 +1470,8 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
           rhY += headerLineHeight + headerPadding;
         }
 
-        // Events (capped: the right half has room for ~3 per day)
-        int shown = calendarDays[d].eventCount;
-        if (shown > 3) shown = 3;
-        for (int i = 0; i < shown; i++) {
-          CalendarEvent& ev = calendarDays[d].events[i];
+        for (int i = 0; i < visibleCount; i++) {
+          CalendarEvent& ev = *visible[i];
 
           if (ev.allDay) {
             // All-day: render summary with indent matching timed events
@@ -1480,6 +1490,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
 
           EPD_ShowStringUTF8(rhX, rhY, buffer, eventFontSize, BLACK);
           rhY += eventLineHeight;
+          calendarRowsRendered++;
         }
 
         rhY += daySectionGap;  // spacing between days
@@ -1491,7 +1502,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     // Bottom-aligned: word-wrap into lines first, then render from bottom up
     {
       // Smaller font when used as filler below calendar events
-      bool isFiller = (calendarTotalEvents > 0);
+      bool isFiller = (calendarRowsRendered > 0);
       int lineHeight = isFiller ? 22 : 26;
       int fontSize = isFiller ? 18 : 20;
       int bottomMargin = 25;

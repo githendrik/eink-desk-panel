@@ -144,7 +144,7 @@ If the API URL is empty, calendar fetching is skipped entirely (no network calls
 
 ## Panel Scope
 
-- **5.79" panel**: Full feature (fetch + render). Rendering is guarded by `#ifdef PANEL_579`. Fact always fetched on its own 4h cycle.
+- **5.79" panel**: Full feature (fetch + render). Rendering is guarded by `#ifdef PANEL_579`. Fact always fetched on its own 4h cycle. Since v0.8.1, today's finished events are hidden (same rule as the 4.2"); if every event for a day is over, that day's header is dropped too.
 - **4.2" panel**: Since v0.7.0 the calendar is rendered in the top half by the
   dedicated German layout in `src/screen_42.h` (see [panel-42-layout.md](panel-42-layout.md)).
   The useless fact is no longer fetched or shown on this panel.
