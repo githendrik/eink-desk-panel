@@ -1358,13 +1358,16 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   }
 
   if (middleText != nullptr) {
+    // helvR14 (size 24): cap height 14px vs 10px for the 9x15 font at size 16.
+    // y is nudged up 6px so the larger text keeps the same optical centre.
+    const int aareFontSize = 24;
     int maxWidth = LAYOUT_W - 20;
-    while (strlen(aareTextBuf) > 0 && EPD_GetUTF8TextWidth(aareTextBuf, 16) > maxWidth) {
+    while (strlen(aareTextBuf) > 0 && EPD_GetUTF8TextWidth(aareTextBuf, aareFontSize) > maxWidth) {
       aareTextBuf[strlen(aareTextBuf) - 1] = '\0';
     }
-    int aareTextWidth = EPD_GetUTF8TextWidth(aareTextBuf, 16);
-    int aareTextY = 155;
-    EPD_ShowStringUTF8(midX - aareTextWidth / 2, aareTextY, aareTextBuf, 16, BLACK);
+    int aareTextWidth = EPD_GetUTF8TextWidth(aareTextBuf, aareFontSize);
+    int aareTextY = 149;
+    EPD_ShowStringUTF8(midX - aareTextWidth / 2, aareTextY, aareTextBuf, aareFontSize, BLACK);
   }
 
   // Bottom-left: Rain status > Pollen (priority order)
