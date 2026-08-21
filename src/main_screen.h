@@ -942,6 +942,10 @@ static void epdEnsurePrevFrame(int frameSize) {
 #define EPD_MAX_PARTIAL_UPDATES 4
 #define EPD_FULL_REFRESH_INTERVAL_MS (1000UL * 60 * 60)   // 1 hour
 #define EPD_BIG_CHANGE_PERCENT 10
+// If the composed frame is byte-identical to what is already on the panel we
+// skip the update entirely. Only exception: a very occasional maintenance
+// refresh, to clear any DC bias if the image has been static for a long time.
+#define EPD_MAINTENANCE_REFRESH_MS (1000UL * 60 * 60 * 24)   // 24 hours
 
 // Push an already-composed frame, choosing a full or partial update.
 static void epdPushFrame(uint8_t* ImageBW, int frameSize, bool& forceFullRefresh) {
@@ -956,6 +960,19 @@ static void epdPushFrame(uint8_t* ImageBW, int frameSize, bool& forceFullRefresh
       if (epdPrevFrame[i] != ImageBW[i]) changed++;
     }
   }
+  // Nothing on screen would change: don't touch the panel at all. This is what
+  // avoids a pointless black/white flash when no displayed value actually
+  // moved. Must be checked before the "overdue" rule below, otherwise a static
+  // screen would still flash once an hour for no reason.
+  bool identical = epdPrevFrameValid && (epdPrevFrame != nullptr) && (changed == 0);
+  bool maintenanceDue = (lastFullMs == 0) ||
+                        (nowMs - lastFullMs >= EPD_MAINTENANCE_REFRESH_MS);
+  if (identical && !forceFullRefresh && !maintenanceDue) {
+    Serial.println("EPD: frame unchanged, skipping refresh");
+    forceFullRefresh = false;
+    return;
+  }
+
   bool bigChange = (changed * 100UL) >= ((uint32_t)frameSize * EPD_BIG_CHANGE_PERCENT);
   bool overdue   = (lastFullMs == 0) || (nowMs - lastFullMs >= EPD_FULL_REFRESH_INTERVAL_MS);
 

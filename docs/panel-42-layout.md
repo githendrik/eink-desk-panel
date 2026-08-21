@@ -88,7 +88,17 @@ Any screen that paints the panel without refreshing that copy must call
 frame that is no longer on screen and the old content bleeds through — this
 caused visible overlapping after visiting the status or OTA screen.
 
-A full refresh (clear + `EPD_Display_Fast`) is forced when any of these hold:
+If the freshly composed frame is **byte-identical** to what is already on the
+panel, the update is skipped entirely — no panel I/O, no flash. This is checked
+before the "overdue" rule, otherwise a screen showing unchanged data would still
+flash once an hour for nothing. The only exception is a maintenance refresh
+after `EPD_MAINTENANCE_REFRESH_MS` (24h) of an unchanged image.
+
+Note this is deliberately keyed off `epdPrevFrameValid`: after another screen has
+painted, the comparison is not trusted and a full refresh happens even if the
+main-screen content is unchanged.
+
+Otherwise, a full refresh (clear + `EPD_Display_Fast`) is forced when any of these hold:
 
 - `forceFullRefresh` was requested,
 - the previous frame is invalid (another screen painted last),
@@ -97,4 +107,4 @@ A full refresh (clear + `EPD_Display_Fast`) is forced when any of these hold:
 - more than `EPD_FULL_REFRESH_INTERVAL_MS` (1 hour) since the last full refresh.
 
 Otherwise a partial update is used. The frame is always composed in RAM first,
-so the full/partial decision can be based on what actually changed.
+so the skip/full/partial decision can be based on what actually changed.
