@@ -480,11 +480,11 @@ bool fetch_openmeteo_data() {
           // Look for when rain ends
           if (!isRain) {
             if (hoursAway >= 3) {
-              rainStatus = "Rain ends in 3h";
+              rainStatus = "Dry in 3h";
             } else if (hoursAway >= 2) {
-              rainStatus = "Rain ends in 2h";
+              rainStatus = "Dry in 2h";
             } else if (hoursAway >= 1) {
-              rainStatus = "Rain end soon";
+              rainStatus = "Dry soon";
             }
             Serial.print("Rain ending: ");
             Serial.println(rainStatus);
@@ -501,7 +501,7 @@ bool fetch_openmeteo_data() {
             } else if (hoursAway >= 1) {
               rainStatus = "Rain in 1h";
             } else {
-              rainStatus = "Rain imminent";
+              rainStatus = "Rain soon";
             }
             Serial.print("Rain forecast: ");
             Serial.println(rainStatus);
@@ -1401,11 +1401,16 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   const int statFallbackSize = 24;
   const int statLabelSize = 16;
   const int statLabelDY = 32;
-  int cellMaxWidth = (LAYOUT_W / 2) - 16;
+  // These cells are centred on leftCenter/rightCenter, which are NOT at the
+  // quarter points of their halves. The usable width is therefore twice the
+  // distance to the nearest panel edge, not LAYOUT_W/2.
+  const int statEdgeMargin = 6;
+  int leftCellMaxWidth = 2 * (bottomLeftCenter - statEdgeMargin);
+  int rightCellMaxWidth = 2 * (LAYOUT_W - statEdgeMargin - rightCenter);
   if (rainStatus.length() > 0) {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", rainStatus.c_str());
-    int rainSize = fitFontSize(buffer, cellMaxWidth, statFontSize, statFallbackSize);
+    int rainSize = fitFontSize(buffer, leftCellMaxWidth, statFontSize, statFallbackSize);
     int rainWidth = EPD_GetUTF8TextWidth(buffer, rainSize);
     EPD_ShowStringUTF8(bottomLeftCenter - rainWidth / 2, bottomY, buffer, rainSize, BLACK);
 
@@ -1416,7 +1421,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   } else {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", pollenLevel.c_str());
-    int pollenSize = fitFontSize(buffer, cellMaxWidth, statFontSize, statFallbackSize);
+    int pollenSize = fitFontSize(buffer, leftCellMaxWidth, statFontSize, statFallbackSize);
     int pollenWidth = EPD_GetUTF8TextWidth(buffer, pollenSize);
     EPD_ShowStringUTF8(bottomLeftCenter - pollenWidth / 2, bottomY, buffer, pollenSize, BLACK);
 
@@ -1437,7 +1442,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
 
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%d %s", uvIndexMax, uvLabel);
-    int uvSize = fitFontSize(buffer, cellMaxWidth, statFontSize, statFallbackSize);
+    int uvSize = fitFontSize(buffer, rightCellMaxWidth, statFontSize, statFallbackSize);
     int uvWidth = EPD_GetUTF8TextWidth(buffer, uvSize);
     EPD_ShowStringUTF8(rightCenter - uvWidth / 2, bottomY, buffer, uvSize, BLACK);
 
@@ -1448,7 +1453,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   } else {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s kg", weight.c_str());
-    int weightSize = fitFontSize(buffer, cellMaxWidth, statFontSize, statFallbackSize);
+    int weightSize = fitFontSize(buffer, rightCellMaxWidth, statFontSize, statFallbackSize);
     int weightWidth = EPD_GetUTF8TextWidth(buffer, weightSize);
     EPD_ShowStringUTF8(rightCenter - weightWidth / 2, bottomY, buffer, weightSize, BLACK);
 
