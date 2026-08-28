@@ -1305,6 +1305,11 @@ void display_ap_screen(uint8_t* ImageBW, const char* ssid, const char* ip) {
   epdInvalidatePrevFrame();   // panel no longer shows the main screen
 }
 
+// Pick the largest of two font sizes that still fits `maxWidth`.
+static int fitFontSize(const char* s, int maxWidth, int big, int small) {
+  return (EPD_GetUTF8TextWidth(s, big) <= maxWidth) ? big : small;
+}
+
 void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   static char buffer[64];
   const int frameSize = EPD_BUF_SIZE;
@@ -1388,28 +1393,37 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   }
 
   // Bottom-left: Rain status > Pollen (priority order)
+  // Value font 28 -> helvR18 (was 24 -> helvR14); label font 16 -> 9x15 (was 12 -> 7x13).
+  // Falls back to 24 when the string would overflow its half-cell.
   int bottomY = topHeight + 5;
   int bottomLeftCenter = leftCenter + 5; // nudge right to visually align with temperature above
+  const int statFontSize = 28;
+  const int statFallbackSize = 24;
+  const int statLabelSize = 16;
+  const int statLabelDY = 32;
+  int cellMaxWidth = (LAYOUT_W / 2) - 16;
   if (rainStatus.length() > 0) {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", rainStatus.c_str());
-    int rainWidth = EPD_GetUTF8TextWidth(buffer, 24);
-    EPD_ShowStringUTF8(bottomLeftCenter - rainWidth / 2, bottomY, buffer, 24, BLACK);
-    
+    int rainSize = fitFontSize(buffer, cellMaxWidth, statFontSize, statFallbackSize);
+    int rainWidth = EPD_GetUTF8TextWidth(buffer, rainSize);
+    EPD_ShowStringUTF8(bottomLeftCenter - rainWidth / 2, bottomY, buffer, rainSize, BLACK);
+
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "weather");
-    int rainLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
-    EPD_ShowStringUTF8(bottomLeftCenter - rainLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
+    int rainLabelWidth = EPD_GetUTF8TextWidth(buffer, statLabelSize);
+    EPD_ShowStringUTF8(bottomLeftCenter - rainLabelWidth / 2, bottomY + statLabelDY, buffer, statLabelSize, BLACK);
   } else {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", pollenLevel.c_str());
-    int pollenWidth = EPD_GetUTF8TextWidth(buffer, 24);
-    EPD_ShowStringUTF8(bottomLeftCenter - pollenWidth / 2, bottomY, buffer, 24, BLACK);
-    
+    int pollenSize = fitFontSize(buffer, cellMaxWidth, statFontSize, statFallbackSize);
+    int pollenWidth = EPD_GetUTF8TextWidth(buffer, pollenSize);
+    EPD_ShowStringUTF8(bottomLeftCenter - pollenWidth / 2, bottomY, buffer, pollenSize, BLACK);
+
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "pollen");
-    int pollenLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
-    EPD_ShowStringUTF8(bottomLeftCenter - pollenLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
+    int pollenLabelWidth = EPD_GetUTF8TextWidth(buffer, statLabelSize);
+    EPD_ShowStringUTF8(bottomLeftCenter - pollenLabelWidth / 2, bottomY + statLabelDY, buffer, statLabelSize, BLACK);
   }
 
   // Bottom-right (of left half): UV index or Weight
@@ -1423,23 +1437,25 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
 
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%d %s", uvIndexMax, uvLabel);
-    int uvWidth = EPD_GetUTF8TextWidth(buffer, 24);
-    EPD_ShowStringUTF8(rightCenter - uvWidth / 2, bottomY, buffer, 24, BLACK);
+    int uvSize = fitFontSize(buffer, cellMaxWidth, statFontSize, statFallbackSize);
+    int uvWidth = EPD_GetUTF8TextWidth(buffer, uvSize);
+    EPD_ShowStringUTF8(rightCenter - uvWidth / 2, bottomY, buffer, uvSize, BLACK);
 
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "uv index");
-    int uvLabelWidth = EPD_GetUTF8TextWidth(buffer, 12);
-    EPD_ShowStringUTF8(rightCenter - uvLabelWidth / 2, bottomY + 26, buffer, 12, BLACK);
+    int uvLabelWidth = EPD_GetUTF8TextWidth(buffer, statLabelSize);
+    EPD_ShowStringUTF8(rightCenter - uvLabelWidth / 2, bottomY + statLabelDY, buffer, statLabelSize, BLACK);
   } else {
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s kg", weight.c_str());
-    int weightWidth = EPD_GetUTF8TextWidth(buffer, 24);
-    EPD_ShowStringUTF8(rightCenter - weightWidth / 2, bottomY, buffer, 24, BLACK);
-    
+    int weightSize = fitFontSize(buffer, cellMaxWidth, statFontSize, statFallbackSize);
+    int weightWidth = EPD_GetUTF8TextWidth(buffer, weightSize);
+    EPD_ShowStringUTF8(rightCenter - weightWidth / 2, bottomY, buffer, weightSize, BLACK);
+
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "%s", weightTrend.c_str());
-    int trendWidth = EPD_GetUTF8TextWidth(buffer, 12);
-    EPD_ShowStringUTF8(rightCenter - trendWidth / 2, bottomY + 26, buffer, 12, BLACK);
+    int trendWidth = EPD_GetUTF8TextWidth(buffer, statLabelSize);
+    EPD_ShowStringUTF8(rightCenter - trendWidth / 2, bottomY + statLabelDY, buffer, statLabelSize, BLACK);
   }
 
 #ifdef PANEL_579
@@ -1517,74 +1533,80 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
       }
     }
 
-    // Show useless fact if there's remaining vertical space
-    // (either no events at all, or after a short event list)
-    // Bottom-aligned: word-wrap into lines first, then render from bottom up
-    {
+    // Show useless fact only if the *complete* wrapped text fits in the
+    // remaining vertical space. Word-wrap first, measure the full block, and
+    // drop the whole block (label included) if it would be clipped.
+    if (uselessFact.length() > 0) {
       // Smaller font when used as filler below calendar events
       bool isFiller = (calendarRowsRendered > 0);
       int lineHeight = isFiller ? 22 : 26;
       int fontSize = isFiller ? 18 : 20;
       int bottomMargin = 25;
+      int topGap = isFiller ? 10 : 0;
       int maxLines = 8;
       int labelFontSize = 12;
       int labelGap = 8;
       int labelHeight = labelFontSize + labelGap;
 
-      // Need room for: label + gap + at least one line of fact text + bottom margin
-      int minRequired = labelHeight + lineHeight + bottomMargin;
+      // Vertical budget available to the whole fact block (label + all lines)
+      int availTop = isFiller ? (rhY + topGap) : 0;
+      int availHeight = (EPD_H - bottomMargin) - availTop;
 
-      if (uselessFact.length() > 0 && rhY + minRequired < EPD_H) {
+      // First pass: word-wrap into line buffer
+      char factBuf[512];
+      strncpy(factBuf, uselessFact.c_str(), sizeof(factBuf) - 1);
+      factBuf[sizeof(factBuf) - 1] = '\0';
 
-        // First pass: word-wrap into line buffer
-        char factBuf[512];
-        strncpy(factBuf, uselessFact.c_str(), sizeof(factBuf) - 1);
-        factBuf[sizeof(factBuf) - 1] = '\0';
+      char lines[8][256];
+      int lineCount = 0;
+      bool truncated = false;
 
-        char lines[8][256];
-        int lineCount = 0;
+      char* remaining = factBuf;
+      while (*remaining) {
+        if (lineCount >= maxLines) { truncated = true; break; }
 
-        char* remaining = factBuf;
-        while (*remaining && lineCount < maxLines) {
-          int len = strlen(remaining);
-          if (len > (int)sizeof(lines[0]) - 1) len = sizeof(lines[0]) - 1;
-          strncpy(lines[lineCount], remaining, len);
-          lines[lineCount][len] = '\0';
+        int len = strlen(remaining);
+        if (len > (int)sizeof(lines[0]) - 1) len = sizeof(lines[0]) - 1;
+        strncpy(lines[lineCount], remaining, len);
+        lines[lineCount][len] = '\0';
 
-          // Shrink until it fits the width
-          while (strlen(lines[lineCount]) > 0 && EPD_GetUTF8TextWidth(lines[lineCount], fontSize) > rhW) {
-            lines[lineCount][strlen(lines[lineCount]) - 1] = '\0';
-          }
-
-          int lineLen = strlen(lines[lineCount]);
-          if (lineLen == 0) break;
-
-          // If we truncated and the next char isn't a space/end, back up to last space
-          if (lineLen < (int)strlen(remaining) && remaining[lineLen] != ' ') {
-            int lastSpace = -1;
-            for (int j = lineLen - 1; j >= 0; j--) {
-              if (lines[lineCount][j] == ' ') { lastSpace = j; break; }
-            }
-            if (lastSpace > 0) {
-              lines[lineCount][lastSpace] = '\0';
-              lineLen = lastSpace;
-            }
-          }
-
-          lineCount++;
-          remaining += lineLen;
-          while (*remaining == ' ') remaining++;
+        // Shrink until it fits the width
+        while (strlen(lines[lineCount]) > 0 && EPD_GetUTF8TextWidth(lines[lineCount], fontSize) > rhW) {
+          lines[lineCount][strlen(lines[lineCount]) - 1] = '\0';
         }
 
-        // Second pass: position the fact text (including label above)
+        int lineLen = strlen(lines[lineCount]);
+        if (lineLen == 0) { truncated = true; break; }
+
+        // If we truncated and the next char isn't a space/end, back up to last space
+        if (lineLen < (int)strlen(remaining) && remaining[lineLen] != ' ') {
+          int lastSpace = -1;
+          for (int j = lineLen - 1; j >= 0; j--) {
+            if (lines[lineCount][j] == ' ') { lastSpace = j; break; }
+          }
+          if (lastSpace > 0) {
+            lines[lineCount][lastSpace] = '\0';
+            lineLen = lastSpace;
+          }
+        }
+
+        lineCount++;
+        remaining += lineLen;
+        while (*remaining == ' ') remaining++;
+      }
+
+      // Total height the block really needs
+      int totalFactHeight = labelHeight + (lineCount * lineHeight);
+
+      // Render only when the entire fact is wrapped (not truncated) and the
+      // whole block fits the available space. Otherwise omit it completely.
+      if (!truncated && lineCount > 0 && totalFactHeight <= availHeight) {
         int factStartY;
         if (isFiller) {
           // Bottom-aligned when used as filler below calendar events
-          factStartY = EPD_H - bottomMargin - (lineCount * lineHeight) - labelHeight - 5;
-          if (factStartY < rhY + 10) factStartY = rhY + 10;
+          factStartY = (EPD_H - bottomMargin) - totalFactHeight;
         } else {
           // Vertically centered on the right half when no events exist
-          int totalFactHeight = labelHeight + (lineCount * lineHeight);
           factStartY = (EPD_H - totalFactHeight) / 2;
         }
 
@@ -1593,9 +1615,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
         factStartY += labelHeight;
 
         for (int i = 0; i < lineCount; i++) {
-          int drawY = factStartY + (i * lineHeight);
-          if (drawY + lineHeight > EPD_H - bottomMargin) break;  // safety
-          EPD_ShowStringUTF8(rhX, drawY, lines[i], fontSize, BLACK);
+          EPD_ShowStringUTF8(rhX, factStartY + (i * lineHeight), lines[i], fontSize, BLACK);
         }
       }
     }
