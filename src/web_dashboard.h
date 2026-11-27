@@ -68,6 +68,10 @@ input{width:100%;padding:8px;margin-top:2px;border:1px solid #ccc;border-radius:
 <label>API URL<input type="text" id="cal_url" placeholder="http://calendar-api:3000/events"></label>
 <label>Bearer Token<input type="password" id="cal_token"></label>
 
+<h2>Solar</h2>
+<label>API URL<input type="text" id="sol_url" placeholder="http://home-apis:3000/solar"></label>
+<label>Bearer Token<input type="password" id="sol_token"></label>
+
 <h2>System Logging</h2>
 <label><input type="checkbox" id="d_enabled"> Enable Discord Integration</label>
 <label>Discord Webhook URL<input type="password" id="d_webhook"></label>
@@ -116,6 +120,8 @@ function save(){
     g_pollen:document.getElementById('g_pollen').value,
     cal_url:document.getElementById('cal_url').value,
     cal_token:document.getElementById('cal_token').value,
+    sol_url:document.getElementById('sol_url').value,
+    sol_token:document.getElementById('sol_token').value,
     d_enabled:document.getElementById('d_enabled').checked,
     d_webhook:document.getElementById('d_webhook').value,
     d_loglevel:parseInt(document.getElementById('d_loglevel').value),
@@ -178,6 +184,8 @@ fetch('/status').then(function(r){return r.json()}).then(function(j){
   if(j.g_pollen)document.getElementById('g_pollen').value=j.g_pollen;
   if(j.cal_url)document.getElementById('cal_url').value=j.cal_url;
   if(j.cal_token)document.getElementById('cal_token').value=j.cal_token;
+  if(j.sol_url)document.getElementById('sol_url').value=j.sol_url;
+  if(j.sol_token)document.getElementById('sol_token').value=j.sol_token;
   if(j.d_enabled!==undefined)document.getElementById('d_enabled').checked=j.d_enabled;
   if(j.d_webhook)document.getElementById('d_webhook').value=j.d_webhook;
   if(j.d_loglevel!==undefined)document.getElementById('d_loglevel').value=j.d_loglevel;
@@ -245,6 +253,16 @@ void setupWebDashboard() {
       config.calendarBearerToken = val;
     }
 
+    // Solar
+    if (JSON.typeof(obj["sol_url"]) != "undefined") {
+      String val = (const char*)obj["sol_url"];
+      config.solarApiUrl = val;  // allow empty to disable
+    }
+    if (JSON.typeof(obj["sol_token"]) != "undefined") {
+      String val = (const char*)obj["sol_token"];
+      config.solarBearerToken = val;
+    }
+
     // Strava
     if (JSON.typeof(obj["s_cid"]) != "undefined") {
       String val = (const char*)obj["s_cid"];
@@ -301,6 +319,8 @@ void setupWebDashboard() {
     json += "\"g_pollen\":\"" + config.googlePollenApiKey + "\",";
     json += "\"cal_url\":\"" + config.calendarApiUrl + "\",";
     json += "\"cal_token\":\"" + config.calendarBearerToken + "\",";
+    json += "\"sol_url\":\"" + config.solarApiUrl + "\",";
+    json += "\"sol_token\":\"" + config.solarBearerToken + "\",";
     json += "\"d_enabled\":" + String(config.discordEnabled ? "true" : "false") + ",";
     json += "\"d_webhook\":\"" + config.discordWebhookUrl + "\",";
     json += "\"d_loglevel\":" + String(config.remoteLogLevel) + ",";

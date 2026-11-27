@@ -29,6 +29,10 @@ public:
   String calendarApiUrl;
   String calendarBearerToken;
 
+  // Solar (home-apis /solar)
+  String solarApiUrl;
+  String solarBearerToken;
+
   // Firmware
   String firmwareVersion;
 
@@ -73,6 +77,11 @@ public:
     calendarBearerToken = prefs.getString("bearer", "");
     prefs.end();
 
+    prefs.begin("solar", true);
+    solarApiUrl = prefs.getString("api_url", "");
+    solarBearerToken = prefs.getString("bearer", "");
+    prefs.end();
+
     prefs.begin("misc", true);
     discordWebhookUrl = prefs.getString("webhook", "");
     discordEnabled = prefs.getBool("discord_on", false);
@@ -94,6 +103,7 @@ public:
     saveGooglePollen();
     saveStrava();
     saveCalendar();
+    saveSolar();
     saveMisc();
     saveFirmwareVersion();
   }
@@ -142,6 +152,14 @@ public:
     prefs.end();
   }
 
+  void saveSolar() {
+    Preferences prefs;
+    prefs.begin("solar", false);
+    prefs.putString("api_url", solarApiUrl);
+    prefs.putString("bearer", solarBearerToken);
+    prefs.end();
+  }
+
   void saveMisc() {
     Preferences prefs;
     prefs.begin("misc", false);
@@ -162,7 +180,7 @@ public:
   // Clear all NVS data (for factory reset)
   void clearAll() {
     Preferences prefs;
-    const char* namespaces[] = {"wifi", "withings", "google", "strava", "calendar", "firmware", "misc"};
+    const char* namespaces[] = {"wifi", "withings", "google", "strava", "calendar", "solar", "firmware", "misc"};
     for (auto ns : namespaces) {
       prefs.begin(ns, false);
       prefs.clear();

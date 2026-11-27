@@ -146,6 +146,7 @@ void setup() {
   fetch_weight_data(httpResponseCode);
   fetch_calendar_data();
   #ifdef PANEL_579
+  fetch_solar_data();
   fetch_useless_fact();
   #endif
 
@@ -159,6 +160,7 @@ void loop() {
   static unsigned long lastWeightFetch = 0;
   static unsigned long lastCalendarFetch = 0;
   static unsigned long lastFactFetch = 0;
+  static unsigned long lastSolarFetch = 0;
 
   // WiFi watchdog: reboot if disconnected for >5 minutes
   static unsigned long wifiLostSince = 0;
@@ -187,6 +189,7 @@ void loop() {
   const unsigned long AARE_INTERVAL = 1000UL * 60 * 10;       // 10 min
   const unsigned long CALENDAR_INTERVAL = 1000UL * 60 * 10;   // 10 min
   const unsigned long FACT_INTERVAL = 1000UL * 60 * 60 * 4;   // 4 hours
+  const unsigned long SOLAR_INTERVAL = 1000UL * 60 * 5;       // 5 min (home-apis polls SEMS at this rate)
   const unsigned long RETRY_INTERVAL = 1000UL * 60 * 1;       // 1 min retry on failure
 
   // Dashboard-triggered OTA check
@@ -327,8 +330,16 @@ void loop() {
     needsRedraw = true;
   }
 
-  // Useless fact fetch (5.7" panel only, every 4 hours)
+  // Solar + useless fact fetch (5.7" panel only)
   #ifdef PANEL_579
+  unsigned long solarInterval = (solarFailCount > 0) ? RETRY_INTERVAL : SOLAR_INTERVAL;
+  if (millis() - lastSolarFetch >= solarInterval) {
+    Serial.println("Fetching solar data...");
+    fetch_solar_data();
+    lastSolarFetch = millis();
+    needsRedraw = true;
+  }
+
   if (millis() - lastFactFetch >= FACT_INTERVAL) {
     Serial.println("Fetching useless fact...");
     fetch_useless_fact();

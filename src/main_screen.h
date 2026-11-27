@@ -30,6 +30,21 @@ extern ConfigManager config;
 String temperature;
 String aareTemp;
 String aareText;
+
+// Latest home-apis /solar snapshot. Power in W; gridW > 0 is import,
+// batteryW > 0 is charging.
+struct SolarData {
+  bool   valid;
+  int    pvW;
+  int    loadW;
+  int    gridW;
+  int    batteryW;
+  int    batterySoc;
+  bool   stale;       // server-side flag: its own upstream poll is failing
+  time_t updatedAt;   // UTC epoch, 0 if unknown
+};
+SolarData solar = {false, 0, 0, 0, 0, 0, false, 0};
+int solarFailCount = 0;
 String pollenLevel;
 String rainStatus;  // empty = no rain, otherwise "Rain in 3h/2h/1h", "Rain imminent", or "Raining"
 int uvIndexMax = 0; // Daily max UV index from Open-Meteo
@@ -754,6 +769,77 @@ bool fetch_aare_data() {
   }
 }
 
+// --- Solar (home-apis) ---
+
+// "2026-11-27T10:15:00Z" -> UTC epoch. Returns 0 if it can't be parsed.
+static time_t parseUtcIso(const char* s) {
+  int y, mo, d, h, mi, se;
+  if (sscanf(s, "%d-%d-%dT%d:%d:%d", &y, &mo, &d, &h, &mi, &se) != 6) return 0;
+  // Days since 1970-01-01 (Howard Hinnant's days_from_civil); newlib has no timegm.
+  y -= mo <= 2;
+  int era = (y >= 0 ? y : y - 399) / 400;
+  int yoe = y - era * 400;
+  int doy = (153 * (mo + (mo > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  int doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  long days = (long)era * 146097 + doe - 719468;
+  return (time_t)(days * 86400L + h * 3600L + mi * 60L + se);
+}
+
+// Returns true on success, false on failure
+bool fetch_solar_data() {
+  if (config.solarApiUrl.length() == 0) {
+    Serial.println("No solar API URL configured, skipping");
+    return false;
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi Disconnected");
+    solarFailCount++;
+    return false;
+  }
+
+  WiFiClient client;
+  HTTPClient http;
+  http.setTimeout(10000);
+  http.begin(client, config.solarApiUrl);
+  if (config.solarBearerToken.length() > 0) {
+    http.addHeader("Authorization", "Bearer " + config.solarBearerToken);
+  }
+  int rc = http.GET();
+
+  if (rc != 200) {
+    remote_log(LOG_ERROR, "Solar", "Error HTTP: " + String(rc));
+    Serial.print("Solar API error: ");
+    Serial.println(rc);
+    http.end();
+    solarFailCount++;
+    return false;
+  }
+
+  String payload = http.getString();
+  http.end();
+  Serial.println(payload);
+  JSONVar obj = JSON.parse(payload);
+  if (JSON.typeof(obj) != "object" || JSON.typeof(obj["pv_w"]) != "number") {
+    Serial.println("Parsing solar data failed!");
+    solarFailCount++;
+    return false;
+  }
+
+  solar.pvW = (int)obj["pv_w"];
+  solar.loadW = (int)obj["load_w"];
+  solar.gridW = (int)obj["grid_w"];
+  solar.batteryW = (int)obj["battery_w"];
+  solar.batterySoc = (int)obj["battery_soc"];
+  solar.stale = JSON.typeof(obj["stale"]) == "boolean" && (bool)obj["stale"];
+  solar.updatedAt = JSON.typeof(obj["updated_at"]) == "string"
+                        ? parseUtcIso((const char*)obj["updated_at"])
+                        : 0;
+  solar.valid = true;
+  solarFailCount = 0;
+  remote_log(LOG_INFO, "Solar", "Success HTTP 200");
+  return true;
+}
+
 // --- Calendar ---
 
 void fetch_useless_fact();  // forward declaration
@@ -1310,6 +1396,230 @@ static int fitFontSize(const char* s, int maxWidth, int big, int small) {
   return (EPD_GetUTF8TextWidth(s, big) <= maxWidth) ? big : small;
 }
 
+#ifdef PANEL_579
+// ---- Solar block (5.79" middle band, in place of the Aare text) ----------
+// Icons are drawn from primitives rather than bitmaps: EPD_ShowPicture() is
+// suspected in an unresolved boot crash (see tools/gen_weather_icons.py).
+
+const int SOLAR_ACTIVE_W = 50;               // below this a flow counts as off
+const long SOLAR_MAX_AGE_SEC = 30L * 60;     // older snapshots show "as of"
+const int SOLAR_ICON = 40;                   // headline icon box, px
+const int SOLAR_HEAD_SIZE = 62;              // logisoso50
+const int SOLAR_DETAIL_SIZE = 24;            // helvR14
+
+enum SolarIcon { SOLAR_ICON_SUN, SOLAR_ICON_HOUSE, SOLAR_ICON_BATTERY, SOLAR_ICON_GRID };
+
+// "1234" W -> "1.2" (kW, one decimal, sign dropped)
+static String solarKw(int w) {
+  int tenths = (abs(w) + 50) / 100;
+  return String(tenths / 10) + "." + String(tenths % 10);
+}
+
+static void solarThickLine(int x0, int y0, int x1, int y1, int t) {
+  for (int dx = 0; dx < t; dx++)
+    for (int dy = 0; dy < t; dy++)
+      EPD_DrawLine(x0 + dx, y0 + dy, x1 + dx, y1 + dy, BLACK);
+}
+
+static void solarFillRect(int x0, int y0, int x1, int y1) {
+  EPD_DrawRectangle(x0, y0, x1, y1 + 1, BLACK, 1);
+}
+
+static void solarFrame(int x0, int y0, int x1, int y1, int t) {
+  solarFillRect(x0, y0, x1, y0 + t - 1);
+  solarFillRect(x0, y1 - t + 1, x1, y1);
+  solarFillRect(x0, y0, x0 + t - 1, y1);
+  solarFillRect(x1 - t + 1, y0, x1, y1);
+}
+
+// Draws a SOLAR_ICON-sized icon with its top-left at (x, y).
+static void solarDrawIcon(SolarIcon icon, int x, int y, int soc) {
+  switch (icon) {
+    case SOLAR_ICON_SUN: {
+      int cx = x + 19, cy = y + 19;
+      EPD_DrawCircle(cx, cy, 9, BLACK, 1);
+      const int dirs[8][2] = {{0,-1},{1,-1},{1,0},{1,1},{0,1},{-1,1},{-1,0},{-1,-1}};
+      for (int i = 0; i < 8; i++) {
+        bool diag = dirs[i][0] != 0 && dirs[i][1] != 0;
+        int r0 = diag ? 10 : 13, r1 = diag ? 14 : 19;
+        solarThickLine(cx + dirs[i][0] * r0 - 1, cy + dirs[i][1] * r0 - 1,
+                       cx + dirs[i][0] * r1 - 1, cy + dirs[i][1] * r1 - 1, 3);
+      }
+      break;
+    }
+    case SOLAR_ICON_HOUSE:
+      solarThickLine(x + 1, y + 19, x + 19, y + 2, 3);
+      solarThickLine(x + 19, y + 2, x + 37, y + 19, 3);
+      solarFrame(x + 6, y + 18, x + 33, y + 39, 3);
+      solarFillRect(x + 16, y + 27, x + 23, y + 39);
+      break;
+    case SOLAR_ICON_BATTERY: {
+      solarFrame(x, y + 9, x + 34, y + 31, 3);
+      solarFillRect(x + 35, y + 15, x + 39, y + 25);
+      int inner = 25;  // x+5 .. x+29
+      int fill = inner * constrain(soc, 0, 100) / 100;
+      if (fill > 0) solarFillRect(x + 5, y + 14, x + 4 + fill, y + 26);
+      break;
+    }
+    case SOLAR_ICON_GRID:
+      // Simple pylon: two converging legs, two cross-arms, one brace.
+      solarThickLine(x + 8, y + 39, x + 17, y + 2, 2);
+      solarThickLine(x + 30, y + 39, x + 21, y + 2, 2);
+      solarFillRect(x + 4, y + 8, x + 35, y + 9);
+      solarFillRect(x + 8, y + 17, x + 31, y + 18);
+      solarThickLine(x + 13, y + 19, x + 27, y + 37, 2);
+      solarThickLine(x + 26, y + 19, x + 12, y + 37, 2);
+      break;
+  }
+}
+
+// Filled arrow pointing right, `len` px long, centred vertically on `cy`.
+static void solarBigArrow(int x, int cy, int len) {
+  const int head = 11;
+  solarFillRect(x, cy - 1, x + len - head, cy + 1);
+  for (int i = 0; i < head; i++) {
+    int h = head - 1 - i;
+    EPD_DrawLine(x + len - head + i, cy - h, x + len - head + i, cy + h, BLACK);
+  }
+}
+
+// 11x11 arrow in the box at (x, y). dir: 0=up 1=right 2=down 3=left
+static void solarSmallArrow(int x, int y, int dir) {
+  const int c = 5;
+  for (int i = 0; i <= c; i++) {
+    // head rows/cols: i = distance from the tip
+    switch (dir) {
+      case 0: EPD_DrawLine(x + c - i, y + i, x + c + i, y + i, BLACK); break;
+      case 2: EPD_DrawLine(x + c - i, y + 10 - i, x + c + i, y + 10 - i, BLACK); break;
+      case 1: EPD_DrawLine(x + 10 - i, y + c - i, x + 10 - i, y + c + i, BLACK); break;
+      case 3: EPD_DrawLine(x + i, y + c - i, x + i, y + c + i, BLACK); break;
+    }
+  }
+  if (dir == 0 || dir == 2) solarFillRect(x + c - 1, y + (dir == 0 ? 5 : 0), x + c + 1, y + (dir == 0 ? 10 : 5));
+  else solarFillRect(x + (dir == 3 ? 5 : 0), y + c - 1, x + (dir == 3 ? 10 : 5), y + c + 1);
+}
+
+// A detail line made of text runs and inline arrows (the fonts have no arrow glyphs).
+struct SolarSeg { const char* text; int arrow; };  // arrow < 0: text run
+const int SOLAR_SMALL_ARROW_W = 11 + 4;            // arrow plus spacing
+
+static int solarSegsWidth(const SolarSeg* segs, int n) {
+  int w = 0;
+  for (int i = 0; i < n; i++)
+    w += segs[i].arrow >= 0 ? SOLAR_SMALL_ARROW_W : EPD_GetUTF8TextWidth(segs[i].text, SOLAR_DETAIL_SIZE);
+  return w;
+}
+
+static void solarDrawSegs(const SolarSeg* segs, int n, int centerX, int y) {
+  int x = centerX - solarSegsWidth(segs, n) / 2;
+  for (int i = 0; i < n; i++) {
+    if (segs[i].arrow >= 0) {
+      // helvR14 caps sit 14px above the baseline at y+24; centre the arrow on them.
+      solarSmallArrow(x + 2, y + 24 - 12, segs[i].arrow);
+      x += SOLAR_SMALL_ARROW_W;
+    } else {
+      EPD_ShowStringUTF8(x, y, segs[i].text, SOLAR_DETAIL_SIZE, BLACK);
+      x += EPD_GetUTF8TextWidth(segs[i].text, SOLAR_DETAIL_SIZE);
+    }
+  }
+}
+
+static bool solarIsOld() {
+  if (solar.stale || solarFailCount >= STALE_THRESHOLD) return true;
+  time_t now = time(NULL);
+  if (now < 1000000000 || solar.updatedAt == 0) return false;
+  return (long)(now - solar.updatedAt) > SOLAR_MAX_AGE_SEC;
+}
+
+// Draws the solar headline and detail line between y=120 and y=205.
+// `override` (non-empty) replaces the detail line, e.g. the staleness warning.
+static void drawSolarBlock(int centerX, const String& override) {
+  const int headY = 112;              // logisoso50 glyphs span ~124..174
+  const int headMidY = headY + 62 - 25;
+  const int detailY = 176;            // helvR14 baseline at 200
+
+  if (!solar.valid) {
+    const char* msg = config.solarApiUrl.length() == 0 ? "solar not configured" : "no solar data";
+    int w = EPD_GetUTF8TextWidth(msg, 28);
+    EPD_ShowStringUTF8(centerX - w / 2, 130, msg, 28, BLACK);
+    if (override.length() > 0) {
+      SolarSeg seg = {override.c_str(), -1};
+      solarDrawSegs(&seg, 1, centerX, detailY);
+    }
+    return;
+  }
+
+  // Headline: <source> -> <house>. At night the source becomes whatever
+  // actually feeds the house.
+  bool night = solar.pvW < SOLAR_ACTIVE_W;
+  bool fromBattery = night && solar.batteryW <= -SOLAR_ACTIVE_W;
+  bool fromGrid = night && !fromBattery && solar.gridW >= SOLAR_ACTIVE_W;
+
+  SolarIcon srcIcon = fromBattery ? SOLAR_ICON_BATTERY : fromGrid ? SOLAR_ICON_GRID : SOLAR_ICON_SUN;
+  String srcText = fromBattery ? String(solar.batterySoc) + "%" : fromGrid ? String("") : solarKw(solar.pvW);
+  String loadText = solarKw(solar.loadW);
+
+  const int iconGap = 6, arrowGap = 12, arrowLen = 30;
+  int srcW = srcText.length() > 0 ? iconGap + EPD_GetUTF8TextWidth(srcText.c_str(), SOLAR_HEAD_SIZE) : 0;
+  int loadW = iconGap + EPD_GetUTF8TextWidth(loadText.c_str(), SOLAR_HEAD_SIZE);
+  int total = SOLAR_ICON + srcW + arrowGap + arrowLen + arrowGap + SOLAR_ICON + loadW;
+  int x = centerX - total / 2;
+  int iconY = headMidY - SOLAR_ICON / 2;
+
+  solarDrawIcon(srcIcon, x, iconY, solar.batterySoc);
+  x += SOLAR_ICON;
+  if (srcText.length() > 0) {
+    EPD_ShowStringUTF8(x + iconGap, headY, srcText.c_str(), SOLAR_HEAD_SIZE, BLACK);
+    x += srcW;
+  }
+  x += arrowGap;
+  solarBigArrow(x, headMidY, arrowLen);
+  x += arrowLen + arrowGap;
+  solarDrawIcon(SOLAR_ICON_HOUSE, x, iconY, 0);
+  x += SOLAR_ICON;
+  EPD_ShowStringUTF8(x + iconGap, headY, loadText.c_str(), SOLAR_HEAD_SIZE, BLACK);
+
+  // Detail line: warning > data age > active flows
+  if (override.length() > 0) {
+    SolarSeg seg = {override.c_str(), -1};
+    solarDrawSegs(&seg, 1, centerX, detailY);
+    return;
+  }
+
+  if (solarIsOld()) {
+    char asOf[24] = "solar stale";
+    if (solar.updatedAt != 0) {
+      struct tm tmv;
+      localtime_r(&solar.updatedAt, &tmv);
+      snprintf(asOf, sizeof(asOf), "as of %02d:%02d", tmv.tm_hour, tmv.tm_min);
+    }
+    SolarSeg seg = {asOf, -1};
+    solarDrawSegs(&seg, 1, centerX, detailY);
+    return;
+  }
+
+  SolarSeg segs[8];
+  int n = 0;
+  String gridKw = solarKw(solar.gridW);
+  String battKw = solarKw(solar.batteryW);
+  bool battActive = abs(solar.batteryW) >= SOLAR_ACTIVE_W;
+  String battLabel = fromBattery ? String("batt ") : "batt " + String(solar.batterySoc) + "%" + (battActive ? " " : "");
+
+  if (abs(solar.gridW) >= SOLAR_ACTIVE_W) {
+    segs[n++] = {"grid ", -1};
+    segs[n++] = {nullptr, solar.gridW > 0 ? 3 : 1};  // import: <-, export: ->
+    segs[n++] = {gridKw.c_str(), -1};
+    segs[n++] = {"  \xC2\xB7  ", -1};
+  }
+  segs[n++] = {battLabel.c_str(), -1};
+  if (battActive) {
+    segs[n++] = {nullptr, solar.batteryW > 0 ? 0 : 2};  // charging: up
+    segs[n++] = {battKw.c_str(), -1};
+  }
+  solarDrawSegs(segs, n, centerX, detailY);
+}
+#endif
+
 void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   static char buffer[64];
   const int frameSize = EPD_BUF_SIZE;
@@ -1364,6 +1674,11 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
   labelWidth = EPD_GetUTF8TextWidth(buffer, 16);
   EPD_ShowStringUTF8(rightCenter - labelWidth / 2, 102, buffer, 16, BLACK);
 
+  // Middle: solar block. The staleness warning takes over its detail line.
+  // The AareGuru text that used to live here is parked below.
+  drawSolarBlock(midX, getStalenessMessage());
+
+  /*
   // Middle: AareGuru text or staleness warning, centered in left half
   String staleMsg = getStalenessMessage();
   const char* middleText = nullptr;
@@ -1391,6 +1706,7 @@ void display_main_screen(uint8_t* ImageBW, bool& forceFullRefresh) {
     int aareTextY = 149;
     EPD_ShowStringUTF8(midX - aareTextWidth / 2, aareTextY, aareTextBuf, aareFontSize, BLACK);
   }
+  */
 
   // Bottom-left: Rain status > Pollen (priority order)
   // Value font 28 -> helvR18 (was 24 -> helvR14); label font 16 -> 9x15 (was 12 -> 7x13).
